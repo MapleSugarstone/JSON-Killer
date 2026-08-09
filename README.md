@@ -1,7 +1,7 @@
 # JSON Killer
 
 JSON reduction for Scratch games. Shrinks `project.json` inside an
-`.sb3` without changing behaviour. Helps for projectes exceeding the 5MB limit on
+`.sb3` without changing behaviour. Helps for projects exceeding the 5MB limit on
 Scratch.mit.edu
 
 ## Use
@@ -38,7 +38,7 @@ mismatch aborts. If you have an error, please contact me.
 
 ## Credits
 
-Permission granted by Lemonadey for use of music
+Permission granted by Lemonadey for use of music.
 
 ## Support
 
