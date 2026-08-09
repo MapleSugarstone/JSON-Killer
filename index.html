@@ -1,0 +1,87 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1">
+<title>JSON Killer</title>
+<meta name="description" content="5MB JSON reduction for Scratch games. Shrinks project.json inside an sb3 without changing behaviour.">
+<meta name="color-scheme" content="dark">
+<link rel="stylesheet" href="style.css">
+</head>
+<body>
+
+<canvas id="life" aria-hidden="true"></canvas>
+
+<button id="musicToggle" type="button" aria-pressed="false">Music: off</button>
+<audio id="music" loop preload="auto">
+  <source src="Music.mp3" type="audio/mpeg">
+  <source src="Music.ogg" type="audio/ogg">
+</audio>
+
+<main>
+
+  <h1>JSON Killer</h1>
+  <p class="lede">5MB JSON reduction for Scratch games.</p>
+
+  <p>An <code>.sb3</code> is a zip. Costumes and sounds take up the majority of space, but the 
+  <code>project.json</code> needs to track them which quickly adds up.
+  This strips out the redundant or bulky tracking without changing behaviour (hopefully). So now you'll have more space if the 
+  <code>project.json</code> exceeds the 5MiB limit!! Please save backups though, this is highly experimental.</p>
+
+  <p>This all runs in your browser, nothing is uploaded!</p>
+
+  <section id="tool">
+    <label id="drop" for="file" tabindex="0">
+      <input type="file" id="file" accept=".sb3" hidden>
+      <span id="droptext">Drop an .sb3 here, or click to choose one</span>
+    </label>
+
+    <div id="opts">
+      <label><input type="checkbox" id="keepNext"> Keep <code>"next":null</code></label>
+      <label><input type="checkbox" id="svgRes"> Also drop <code>bitmapResolution</code> from svg costumes</label>
+    </div>
+
+    <div id="status" hidden></div>
+    <div id="error" hidden></div>
+
+    <div id="result" hidden>
+      <table id="stats"></table>
+      <p id="summary"></p>
+      <a id="download" class="button" download>Download shrunk sb3</a>
+    </div>
+  </section>
+
+  <h2>Method</h2>
+  <ul class="method">
+    <li>Drops <code>"topLevel":false</code>, <code>"shadow":false</code>,
+      <code>"next":null</code>. Every scratch-vm reader is a truthy test or
+      null safe.</li>
+    <li>Drops empty <code>"inputs":{}</code> and <code>"fields":{}</code>. The
+      deserializer walks both with <code>for..in</code>.</li>
+    <li>Drops the trailing null id from field arrays, read behind
+      <code>if (fieldId)</code>.</li>
+    <li>Drops costume <code>md5ext</code> when it equals
+      <code>assetId + "." + dataFormat</code>, which scratch-vm rebuilds. Sound
+      <code>md5ext</code> stays since it has no fallback.</li>
+    <li>Rounds rotation centre floats to 3dp, trimming noise like
+      <code>299.50337500000004</code>.</li>
+    <li>Deletes orphaned blocks, reachable from no top level script. Residue
+      from deletions.</li>
+    <li>Keeps <code>"parent":null</code>. <code>getTopLevelScript</code> loops on
+      <code>while (block.parent !== null)</code>.</li>
+  </ul>
+
+  <h2>Support</h2>
+  <p>Donate at <a href="https://ko-fi.com/krazvalt" rel="noopener">ko-fi.com/krazvalt</a> if you wanna support me!!</p>
+
+  <footer>
+    Permission granted by Lemonadey for use of music. MIT licensed.
+  </footer>
+
+</main>
+
+<script src="life.js"></script>
+<script src="sb3shrink.js"></script>
+<script src="app.js"></script>
+</body>
+</html>
