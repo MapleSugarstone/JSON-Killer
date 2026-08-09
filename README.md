@@ -34,7 +34,7 @@ mismatch aborts. If you have an error, please contact me.
 | `app.js` | UI and music |
 | `life.js` | Background Game of Life |
 | `style.css` | Styling |
-| `Music.mp3` or `Music.ogg` | Background track. The page tries mp3 first, then ogg |
+| `Music.mp3` or `Music.ogg` | Background track by Lemonadey. |
 
 ## Credits
 
