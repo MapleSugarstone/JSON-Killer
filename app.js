@@ -112,33 +112,46 @@
 
   /* music */
   const audio = $('music'), toggle = $('musicToggle');
+  const KEY = 'jk-music-v2';
   audio.volume = 0.35;
-  let wanted = localStorage.getItem('jk-music') !== 'off';
+  let wanted = localStorage.getItem(KEY) !== 'off';
 
+  // The label tracks real playback, not intent. Autoplay is blocked until the
+  // page has been interacted with, so intent and reality disagree on load, and
+  // a button that claims "off" has to actually turn the music on when clicked.
   function paint() {
-    toggle.textContent = 'Music: ' + (wanted && !audio.paused ? 'on' : 'off');
-    toggle.setAttribute('aria-pressed', String(wanted && !audio.paused));
+    const on = !audio.paused;
+    toggle.textContent = 'Music: ' + (on ? 'on' : 'off');
+    toggle.setAttribute('aria-pressed', String(on));
   }
 
-  function start() {
-    if (!wanted) return;
-    audio.play().then(paint, paint);
+  function tryPlay() {
+    if (!wanted || !audio.paused) return;
+    audio.play().then(paint, function () {});
   }
 
-  toggle.addEventListener('click', () => {
-    wanted = !wanted;
-    localStorage.setItem('jk-music', wanted ? 'on' : 'off');
-    if (wanted) audio.play().then(paint, paint);
-    else { audio.pause(); paint(); }
+  toggle.addEventListener('click', function () {
+    // a click is a user gesture, so this play() is allowed through
+    if (audio.paused) { wanted = true; audio.play().then(paint, paint); }
+    else { wanted = false; audio.pause(); }
+    localStorage.setItem(KEY, wanted ? 'on' : 'off');
+    paint();
   });
 
   audio.addEventListener('play', paint);
   audio.addEventListener('pause', paint);
 
-  // browsers block autoplay until a gesture, so retry on the first one
-  start();
-  const onGesture = () => { start(); window.removeEventListener('pointerdown', onGesture); window.removeEventListener('keydown', onGesture); };
-  window.addEventListener('pointerdown', onGesture);
-  window.addEventListener('keydown', onGesture);
+  // Autoplay with sound is blocked until the visitor interacts, so keep
+  // retrying on each gesture until one is let through. Ignore gestures on the
+  // toggle itself, or it would start the track and the click would stop it.
+  const GESTURES = ['pointerdown', 'keydown', 'touchstart'];
+  function onGesture(e) {
+    if (e.target && e.target.closest && e.target.closest('#musicToggle')) return;
+    tryPlay();
+    if (!audio.paused) GESTURES.forEach(g => window.removeEventListener(g, onGesture));
+  }
+  GESTURES.forEach(g => window.addEventListener(g, onGesture, { passive: true }));
+
+  tryPlay();
   paint();
 })();
