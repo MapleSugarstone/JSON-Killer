@@ -39,6 +39,47 @@
     <div id="opts">
       <label><input type="checkbox" id="keepNext"> Keep <code>"next":null</code></label>
       <label><input type="checkbox" id="svgRes"> Also drop <code>bitmapResolution</code> from svg costumes</label>
+      <label><input type="checkbox" id="rasterize"> Rasterize svg costumes to png</label>
+
+      <div id="rasterOpts" hidden>
+        <p class="warn">This doesn't save JSON.</p>
+        <label for="rasterScale">Resolution
+          <select id="rasterScale">
+            <option value="1">1&times; (smaller, softer)</option>
+            <option value="2" selected>2&times;</option>
+          </select>
+        </label>
+        <p class="note">2&times; is the default. scratch-vm
+          overwrites <code>bitmapResolution</code> with 2 as it loads and then
+          shows every costume at half its pixel size, so nothing bigger works.</p>
+        <label for="rasterSample">Supersampling
+          <select id="rasterSample">
+            <option value="1" selected>Off</option>
+            <option value="2">2&times;</option>
+            <option value="4">4&times;</option>
+          </select>
+        </label>
+        <p class="note">Draws each costume bigger and averages it back
+          down. Creates slightly cleaner
+          edges on fine detail.</p>
+        <label><input type="checkbox" id="rasterAA" checked> Anti-alias. Causes smoothing</label>
+      </div>
+
+      <label><input type="checkbox" id="sounds"> Convert sounds to mono mp3</label>
+
+      <div id="soundOpts" hidden>
+        <p class="warn">This doesn't save JSON.</p>
+        <label for="soundKbps">Bitrate
+          <select id="soundKbps">
+            <option value="64">64 kbps (undercuts adpcm)</option>
+            <option value="96">96 kbps</option>
+            <option value="128" selected>128 kbps</option>
+            <option value="160">160 kbps</option>
+          </select>
+        </label>
+        <p class="note">This only reduces if the file would be smaller afterwards.</p>
+
+      </div>
     </div>
 
     <div id="status" hidden></div>
@@ -47,6 +88,8 @@
     <div id="result" hidden>
       <table id="stats"></table>
       <p id="summary"></p>
+      <div id="rasterReport" hidden></div>
+      <div id="soundReport" hidden></div>
       <a id="download" class="button" download>Download shrunk sb3</a>
     </div>
   </section>
@@ -71,17 +114,49 @@
       <code>while (block.parent !== null)</code>.</li>
   </ul>
 
+  <section id="rasterDocs" hidden>
+  <h2>Rasterizing</h2>
+  <p>Doesn't decrease JSON. It redraws svg costumes
+  as png.</p>
+  <ul class="method">
+    <li>A costume is sized the way scratch-vm sizes it: the bounding box of what
+      is actually drawn, grown by half of the widest stroke in the file. The png
+      covers exactly that box, so the drawing keeps its size and its place.</li>
+    <li>Anything over 480 &times; 360 is left as svg. Those costumes are listed by
+      their name in the <code>project.json</code> after a run.</li>
+  </ul>
+  </section>
+
+  <section id="soundDocs" hidden>
+  <h2>Sounds</h2>
+  <p>Doesn't decrease JSON. Every sound is decoded, mixed down to one channel and re-encoded as mp3.
+  <code>dataFormat</code> becomes <code>mp3</code>, which is in the list
+  scratch-parser accepts.</p>
+  <ul class="method">
+    <li>Scratch's
+      library sounds are 22&nbsp;kHz adpcm at about 88&nbsp;kbps, so at the
+      default 128 most default assets won't be shrunk.</li>
+  </ul>
+  </section>
+
   <h2>Support</h2>
   <p>Donate at <a href="https://ko-fi.com/krazvalt" rel="noopener">ko-fi.com/krazvalt</a> if you wanna support me!!</p>
 
   <footer>
-    Permission granted by Lemonadey for use of music. MIT licensed.
+    Permission granted by Lemonadey for use of music. MIT licensed. Mp3 encoding
+    by <a href="https://lame.sourceforge.net" rel="noopener">LAME</a> via
+    <a href="https://github.com/zhuker/lamejs" rel="noopener">lamejs</a>, used
+    unmodified under the LGPL.
   </footer>
 
 </main>
 
 <script src="life.js"></script>
 <script src="sb3shrink.js"></script>
+<script src="rasterize.js"></script>
+<!-- lame.min.js is 156 kB and most visitors never convert a sound, so app.js
+     fetches it the first time the box is ticked rather than on every load -->
+<script src="soundconv.js"></script>
 <script src="app.js"></script>
 </body>
 </html>

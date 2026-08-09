@@ -6,6 +6,10 @@
   const drop = $('drop'), fileInput = $('file'), dropText = $('droptext');
   const statusEl = $('status'), errorEl = $('error'), resultEl = $('result');
   const statsEl = $('stats'), summaryEl = $('summary'), downloadEl = $('download');
+  const rasterEl = $('rasterize'), rasterOptsEl = $('rasterOpts'), rasterReportEl = $('rasterReport');
+  const rasterDocsEl = $('rasterDocs');
+  const soundEl = $('sounds'), soundOptsEl = $('soundOpts'), soundReportEl = $('soundReport');
+  const soundDocsEl = $('soundDocs');
 
   let url = null;
   let busy = false;
@@ -40,6 +44,115 @@
     }
   }
 
+  /* reports for the two passes that change assets */
+
+  const size = c => Math.round(c.w) + ' × ' + Math.round(c.h);
+
+  // Costumes and sounds are named by their name in the project.json, never by
+  // the md5 the file is stored under, which is the whole point of listing them
+  // here.
+  function nameList(items, label) {
+    const p = document.createElement('p');
+    p.textContent = items.length + ' ' + label;
+    const ul = document.createElement('ul');
+    ul.className = 'names';
+    for (const it of items) {
+      const li = document.createElement('li');
+      li.textContent = it.target + ' › ' + it.name +
+        (it.w !== undefined ? ' — ' + size(it) : '') +
+        (it.why ? ' — ' + it.why : '');
+      ul.appendChild(li);
+    }
+    p.appendChild(ul);
+    return p;
+  }
+
+  function renderRaster(r) {
+    rasterReportEl.hidden = true;
+    rasterReportEl.textContent = '';
+    if (!r) return;
+    rasterReportEl.hidden = false;
+
+    const head = document.createElement('p');
+    head.textContent = r.total === 0
+      ? 'No svg costumes to rasterize.'
+      : 'Rasterized ' + n(r.converted) + ' of ' + n(r.total) + ' svg costumes at ' +
+        r.scale + '×, ' + (r.antialias ? 'anti-aliased' : 'aliased') +
+        (r.sample > 1 ? ', supersampled ' + r.sample + '×' : '') + '. ' +
+        n(r.assets) + ' png written, assets ' + n(r.bytesBefore) + ' to ' +
+        n(r.bytesAfter) + ' bytes.';
+    rasterReportEl.appendChild(head);
+
+    if (r.tooBig.length) {
+      rasterReportEl.appendChild(nameList(r.tooBig, 'left as svg, bigger than the 480 × 360 stage:'));
+    }
+    if (r.failed.length) {
+      rasterReportEl.appendChild(nameList(r.failed, 'left as svg, could not be rasterized:'));
+    }
+    if (r.text.length) {
+      rasterReportEl.appendChild(nameList(r.text, 'contain text, redrawn in this browser’s fonts. Check them:'));
+    }
+  }
+
+  function renderSounds(r) {
+    soundReportEl.hidden = true;
+    soundReportEl.textContent = '';
+    if (!r) return;
+    soundReportEl.hidden = false;
+
+    const head = document.createElement('p');
+    head.textContent = r.total === 0
+      ? 'No sounds to convert.'
+      : 'Converted ' + n(r.converted) + ' of ' + n(r.total) + ' sounds to mono ' +
+        r.kbps + ' kbps mp3. ' + n(r.assets) + ' mp3 written, assets ' +
+        n(r.bytesBefore) + ' to ' + n(r.bytesAfter) + ' bytes.';
+    soundReportEl.appendChild(head);
+
+    if (r.kept.length) {
+      soundReportEl.appendChild(nameList(r.kept, 'left alone, already smaller than an mp3 of them:'));
+    }
+    if (r.failed.length) {
+      soundReportEl.appendChild(nameList(r.failed, 'left alone, could not be converted:'));
+    }
+  }
+
+  // Nothing about either extra pass is on the page until it is switched on: not
+  // the settings, not the write up under Method. The initial calls matter
+  // because a browser restores a ticked box across a reload without firing
+  // change.
+  function paintRasterUi() {
+    rasterOptsEl.hidden = !rasterEl.checked;
+    rasterDocsEl.hidden = !rasterEl.checked;
+  }
+  rasterEl.addEventListener('change', paintRasterUi);
+  paintRasterUi();
+
+  // 156 kB of encoder that most visitors never need, so it is fetched the first
+  // time the box is ticked rather than on every page load.
+  let lame = null;
+  function loadLame() {
+    if (!lame) {
+      lame = new Promise((res, rej) => {
+        const s = document.createElement('script');
+        s.src = 'lame.min.js';
+        s.onload = res;
+        s.onerror = () => { lame = null; rej(new Error('lame.min.js could not be loaded.')); };
+        document.head.appendChild(s);
+      });
+    }
+    return lame;
+  }
+
+  function paintSoundUi() {
+    soundOptsEl.hidden = !soundEl.checked;
+    soundDocsEl.hidden = !soundEl.checked;
+    // start the fetch on the tick, so it is usually done by the time a file
+    // arrives. run() waits on the same promise either way.
+    if (soundEl.checked) loadLame().catch(function () {});
+  }
+  soundEl.addEventListener('change', paintSoundUi);
+  paintSoundUi();
+
   async function run(file) {
     if (busy) return;
     if (!window.CompressionStream || !window.DecompressionStream) {
@@ -55,6 +168,19 @@
     try {
       const buffer = await file.arrayBuffer();
       const opts = { keepNext: $('keepNext').checked, dropSvgBitmapRes: $('svgRes').checked };
+      if (rasterEl.checked) {
+        opts.rasterize = RASTER.pass({
+          scale: Number($('rasterScale').value),
+          supersample: Number($('rasterSample').value),
+          antialias: $('rasterAA').checked
+        });
+      }
+      if (soundEl.checked) {
+        statusEl.textContent = 'Loading the mp3 encoder';
+        await tick();
+        await loadLame();
+        opts.sounds = SOUND.pass({ kbps: Number($('soundKbps').value) });
+      }
 
       const res = await SB3.process(buffer, opts, async msg => {
         statusEl.textContent = msg;
@@ -69,12 +195,19 @@
         tr.insertCell().textContent = n(res.stats[k]);
       }
 
+      // Rasterizing writes a bitmapResolution back onto every costume it
+      // touches, so on that path the json can come out bigger than it went in.
       const saved = res.before - res.after;
-      const pct = res.before ? (100 * saved / res.before).toFixed(1) : '0.0';
+      const pct = res.before ? (100 * Math.abs(saved) / res.before).toFixed(1) : '0.0';
+      const verdict = saved < 0
+        ? '<b class="bad">' + n(-saved) + ' added, ' + pct + '%</b>'
+        : '<b>' + n(saved) + ' saved, ' + pct + '%</b>';
       summaryEl.innerHTML =
         'Verified identical, ' + n(res.compared) + ' live blocks compared.<br>' +
-        'project.json ' + n(res.before) + ' to ' + n(res.after) + ' bytes ' +
-        '(<b>' + n(saved) + ' saved, ' + pct + '%</b>).';
+        'project.json ' + n(res.before) + ' to ' + n(res.after) + ' bytes (' + verdict + ').';
+
+      renderRaster(res.raster);
+      renderSounds(res.sounds);
 
       url = URL.createObjectURL(res.blob);
       downloadEl.href = url;

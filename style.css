@@ -12,6 +12,10 @@
 
 * { box-sizing: border-box; }
 
+/* Any display rule of ours outranks the browser's [hidden] { display: none },
+   so hidden panels have to be pinned shut here or they stay on screen. */
+[hidden] { display: none !important; }
+
 body {
   margin: 0;
   background: var(--bg);
@@ -101,6 +105,32 @@ a { color: var(--accent); }
 #opts { margin-top: 0.9rem; display: flex; flex-direction: column; gap: 0.35rem; }
 #opts label { font-size: 0.9rem; color: var(--muted); cursor: pointer; }
 
+#rasterOpts, #soundOpts {
+  display: flex;
+  flex-direction: column;
+  gap: 0.35rem;
+  margin: 0.25rem 0 0.1rem 1.4rem;
+  padding-left: 0.8rem;
+  border-left: 1px solid var(--line);
+}
+#rasterOpts .warn, #soundOpts .warn { font-size: 0.82rem; color: var(--bad); margin: 0.15rem 0 0.35rem; }
+#rasterOpts .note, #soundOpts .note { font-size: 0.78rem; color: var(--muted); margin: -0.1rem 0 0.3rem; }
+#rasterOpts select, #soundOpts select {
+  background: rgba(0, 0, 0, 0.3);
+  color: var(--fg);
+  border: 1px solid var(--line);
+  border-radius: 5px;
+  padding: 0.15rem 0.3rem;
+  font: inherit;
+  font-size: 0.85rem;
+  margin-left: 0.35rem;
+}
+
+#rasterReport, #soundReport { font-size: 0.88rem; color: var(--muted); margin-bottom: 0.9rem; }
+#rasterReport p, #soundReport p { margin: 0 0 0.5rem; }
+.names { margin: 0.3rem 0 0; padding-left: 1.1rem; }
+.names li { margin-bottom: 0.15rem; }
+
 #status, #error, #result { margin-top: 1rem; }
 #status { color: var(--muted); font-size: 0.9rem; }
 #error { color: var(--bad); font-size: 0.9rem; }
@@ -117,6 +147,7 @@ td:last-child { text-align: right; font-variant-numeric: tabular-nums; }
 
 #summary { font-size: 0.92rem; }
 #summary b { color: var(--ok); }
+#summary b.bad { color: var(--bad); }
 
 .button {
   display: inline-block;

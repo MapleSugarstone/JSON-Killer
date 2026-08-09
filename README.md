@@ -25,20 +25,29 @@ Open the page, drop an `.sb3` in, download the result.
 Output is verified against the input block by block before download. Any
 mismatch aborts. If you have an error, please contact me.
 
+
 ## Files
 
 | File | Purpose |
 | --- | --- |
 | `index.html` | Page and documentation |
 | `sb3shrink.js` | Zip reader and writer, shrink, verify. No DOM |
+| `rasterize.js` | Optional svg to png pass, md5. Needs the DOM |
+| `soundconv.js` | Optional sound to mono mp3 pass. Needs the DOM |
+| `lame.min.js` | lamejs, vendored unmodified. Fetched only when sounds are converted |
 | `app.js` | UI and music |
 | `life.js` | Background Game of Life |
 | `style.css` | Styling |
-| `Music.mp3` or `Music.ogg` | Background track by Lemonadey. |
+| `Music.mp3` | Track by Lemonadey. |
 
 ## Credits
 
 Permission granted by Lemonadey for use of music.
+
+Mp3 encoding is [LAME](https://lame.sourceforge.net) by way of
+[lamejs](https://github.com/zhuker/lamejs), kept unmodified in `lame.min.js` and
+used under the LGPL. See `LICENSE.lamejs`. It is a separate file and replacing it
+replaces the encoder; nothing else here is derived from it.
 
 ## Support
 
