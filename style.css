@@ -8,6 +8,7 @@
   --accent: #8fa4ff;
   --ok: #6ee787;
   --bad: #ff8787;
+  --caution: #e3c05c;
 }
 
 * { box-sizing: border-box; }
@@ -157,7 +158,56 @@ td:last-child { text-align: right; font-variant-numeric: tabular-nums; }
   padding: 0.55rem 1rem;
   border-radius: 7px;
   font-size: 0.92rem;
+  font-family: inherit;
+  border: 0;
+  cursor: pointer;
 }
+
+/* the cleanup button deletes blocks, so it does not get to wear the same
+   colour as the download everyone is meant to press */
+.button.secondary {
+  background: transparent;
+  color: var(--bad);
+  border: 1px solid var(--bad);
+}
+.button.secondary:hover, .button.secondary:focus-visible {
+  background: var(--bad);
+  color: #0d0d10;
+  outline: none;
+}
+
+/* fixing a covered reference cannot change behaviour, so it does not get to
+   look as loud as the two that delete blocks */
+.button.gentle {
+  background: transparent;
+  color: var(--ok);
+  border: 1px solid var(--ok);
+}
+.button.gentle:hover, .button.gentle:focus-visible {
+  background: var(--ok);
+  color: #0d0d10;
+  outline: none;
+}
+
+/* The stripe down the side follows the worst finding in the box, not the fact
+   that there is a box. */
+#damage {
+  font-size: 0.88rem;
+  margin-bottom: 0.9rem;
+  border-left: 2px solid var(--ok);
+  padding-left: 0.8rem;
+}
+#damage.serious { border-left-color: var(--bad); }
+#damage.minor { border-left-color: var(--caution); }
+#damage.cosmetic { border-left-color: var(--ok); }
+#damage p { margin: 0 0 0.6rem; }
+#choices { margin: 0.9rem 0 0.4rem; display: flex; flex-direction: column; gap: 0.2rem; }
+#choices label { color: var(--fg); cursor: pointer; }
+#choices .note { margin: 0 0 0.5rem 1.35rem; }
+#damage .warn { color: var(--bad); }
+#damage .caution { color: var(--caution); }
+#damage .good { color: var(--ok); }
+#damage .note { color: var(--muted); font-size: 0.82rem; }
 
 footer {
   margin-top: 3rem;

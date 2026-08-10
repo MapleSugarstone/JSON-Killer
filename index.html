@@ -99,6 +99,7 @@
     <div id="result" hidden>
       <table id="stats"></table>
       <p id="summary"></p>
+      <div id="damage" hidden></div>
       <div id="rasterReport" hidden></div>
       <div id="soundReport" hidden></div>
       <a id="download" class="button" download>Download shrunk sb3</a>
@@ -123,8 +124,28 @@
       back as 1.</li>
     <li>Rounds rotation centre floats to 3dp, trimming noise like
       <code>299.50337500000004</code>.</li>
-    <li>Deletes orphaned blocks, reachable from no top level script. Residue
-      from deletions.</li>
+    <li>Deletes orphaned blocks: residue that no top level script reaches
+      <em>and</em> that is attached to nothing which survives. A block still
+      naming a live parent is a detached script rather than residue, so it is
+      kept and reported instead.</li>
+    <li>Checks the delete pass by attachment, not by reachability. Reachability
+      is what chooses the blocks to drop, so asking it afterwards whether the
+      choice was right only ever returns its own answer.</li>
+    <li>Reports links that disagree in both directions, where a block points at
+      something another block owns.</li>
+    <li>Reports dropdowns naming a costume, backdrop, sound or sprite that is
+      gone. Red hides or duplicates code and is yours to fix, yellow runs and
+      does nothing and can be deleted, green is covered up and can be repaired.
+      Residue the sweep removes anyway is not reported.</li>
+    <li>Leaves a name that parses as a number alone. Scratch falls back to using
+      it as an index, so such a block still does something.</li>
+    <li>Reports inputs naming a block the file does not contain. In the first
+      slot that is a blank hole in a script and the value is gone for good;
+      underneath a plugged in reporter it reads as nothing and the dangling id
+      is simply dropped.</li>
+    <li>Offers to remove a duplicated custom block
+      definition: a copy whose own pointers aim at another script’s blocks,
+      along with the code hanging under it.</li>
     <li>Keeps <code>"parent":null</code>. <code>getTopLevelScript</code> loops on
       <code>while (block.parent !== null)</code>.</li>
   </ul>

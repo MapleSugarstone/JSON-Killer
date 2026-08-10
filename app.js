@@ -6,6 +6,7 @@
   const drop = $('drop'), fileInput = $('file'), dropText = $('droptext');
   const statusEl = $('status'), errorEl = $('error'), resultEl = $('result');
   const statsEl = $('stats'), summaryEl = $('summary'), downloadEl = $('download');
+  const damageEl = $('damage');
   const rasterEl = $('rasterize'), rasterOptsEl = $('rasterOpts'), rasterReportEl = $('rasterReport');
   const rasterDocsEl = $('rasterDocs');
   const soundEl = $('sounds'), soundOptsEl = $('soundOpts'), soundReportEl = $('soundReport');
@@ -13,6 +14,8 @@
 
   let url = null;
   let busy = false;
+  // the file waiting on a decision, held so apply() does not re-read it
+  let pending = null;
 
   const n = x => x.toLocaleString('en-US');
   const tick = () => new Promise(r => setTimeout(r, 0));
@@ -59,12 +62,207 @@
     for (const it of items) {
       const li = document.createElement('li');
       li.textContent = it.target + ' › ' + it.name +
-        (it.w !== undefined ? ' — ' + size(it) : '') +
-        (it.why ? ' — ' + it.why : '');
+        (it.w !== undefined ? ' - ' + size(it) : '') +
+        (it.why ? ' - ' + it.why : '');
       ul.appendChild(li);
     }
     p.appendChild(ul);
     return p;
+  }
+
+  function para(text, cls) {
+    const p = document.createElement('p');
+    if (cls) p.className = cls;
+    p.textContent = text;
+    return p;
+  }
+
+  // Every one of them, however many there are. A report that stops at a round
+  // number and says "and 4 more" hides exactly the entry someone is hunting
+  // for, and the whole point of this list is to be gone through.
+  function bullets(items) {
+    const ul = document.createElement('ul');
+    ul.className = 'names';
+    for (const t of items) {
+      const li = document.createElement('li');
+      li.textContent = t;
+      ul.appendChild(li);
+    }
+    return ul;
+  }
+
+  // Red is code that is hidden or duplicated. Yellow runs and quietly does
+  // nothing. Green is wrong in the file but never read.
+  const pick = (list, lvl) => list.filter(function (d) { return d.level === lvl; });
+  const worst = (high, mid) => (high.length ? 'serious' : mid.length ? 'minor' : 'cosmetic');
+  const count = (a, one, many) => n(a.length) + (a.length === 1 ? one : many);
+
+  function sections(high, mid, low, el) {
+    el = el || damageEl;
+    const add = (items, cls, text) => {
+      if (!items.length) return;
+      el.appendChild(para(text, cls));
+      el.appendChild(bullets(items.map(function (d) { return d.text; })));
+    };
+    add(high, 'warn', count(high, ' broken link.', ' broken links.') +
+      ' Code is hidden or duplicated.');
+    add(mid, 'caution', count(mid, ' dead reference.', ' dead references.') +
+      ' These run and do nothing.');
+    add(low, 'good', count(low, ' covered reference.', ' covered references.') +
+      ' Never read, no effect.');
+  }
+
+  // Damage the file arrived with. Shrinking neither causes it nor repairs it,
+  // but a link that disagrees with itself is how a whole script ends up in the
+  // file with nothing in the editor drawing it, and that script is exactly what
+  // a delete pass is most likely to mistake for residue. Nothing is thrown away
+  // unless the cleanup below is asked for by name.
+  function renderDamage(res) {
+    damageEl.hidden = true;
+    damageEl.textContent = '';
+
+    if (res.cleaned || res.deleted || res.fixed) return renderActions(res);
+
+    const list = res.damaged || [];
+    if (!list.length) return;
+    damageEl.hidden = false;
+
+    const high = pick(list, 'high'), mid = pick(list, 'mid'), low = pick(list, 'low');
+    damageEl.className = worst(high, mid);
+    sections(high, mid, low);
+
+    damageEl.appendChild(para(high.length
+      ? 'Red is yours to fix in Scratch.'
+      : 'Nothing here needs doing.', 'note'));
+  }
+
+  /* the review step: choose what to do before anything slow runs */
+
+  // Rasterizing and sound conversion take the longest and their results do not
+  // depend on any of this, so the choices are made first and the whole pipeline
+  // runs once afterwards. Ticking a box costs nothing, and every combination is
+  // allowed, which the old one-button-per-action version could not do.
+  function renderReview(pre) {
+    damageEl.hidden = false;
+    damageEl.textContent = '';
+
+    const list = pre.damaged || [];
+    const high = pick(list, 'high'), mid = pick(list, 'mid'), low = pick(list, 'low');
+    damageEl.className = worst(high, mid);
+    sections(high, mid, low);
+
+    const box = document.createElement('div');
+    box.id = 'choices';
+
+    const option = (count, key, label, note) => {
+      if (!count) return;
+      const l = document.createElement('label');
+      const cb = document.createElement('input');
+      cb.type = 'checkbox';
+      cb.dataset.action = key;
+      l.appendChild(cb);
+      l.appendChild(document.createTextNode(' ' + label));
+      box.appendChild(l);
+      box.appendChild(para(note, 'note'));
+    };
+
+    option(pre.cleanable, 'cleanDuplicates',
+      'Remove ' + n(pre.cleanable) + ' duplicated definition' + (pre.cleanable === 1 ? '' : 's'),
+      'A definition whose pointers aim at another script’s blocks, plus the code under it. ' +
+      'Skipped if anything surviving points into it.');
+
+    option(pre.deletable, 'deleteDead',
+      'Delete ' + n(pre.deletable) + ' block' + (pre.deletable === 1 ? '' : 's') + ' that do nothing',
+      'Stack blocks whose dropdown names something the project no longer has. The script ' +
+      'closes up behind them. Reporters and hats are left alone.');
+
+    option(pre.fixable, 'fixCovered',
+      'Fix ' + n(pre.fixable) + ' covered reference' + (pre.fixable === 1 ? '' : 's'),
+      'Points stale owners back at the block holding them, and covered dropdowns at an ' +
+      'asset that exists. Nothing executes either, so behaviour cannot change.');
+
+    damageEl.appendChild(box);
+
+    const wrap = document.createElement('p');
+    const go = document.createElement('button');
+    go.type = 'button';
+    go.className = 'button';
+    go.textContent = 'Shrink';
+    go.addEventListener('click', apply);
+    wrap.appendChild(go);
+    damageEl.appendChild(wrap);
+    damageEl.appendChild(para(
+      'Tick none of them to just shrink.'));
+  }
+
+  function chosenActions() {
+    const opts = {};
+    const boxes = damageEl.querySelectorAll('input[data-action]');
+    for (let i = 0; i < boxes.length; i++) {
+      if (boxes[i].checked) opts[boxes[i].dataset.action] = true;
+    }
+    return opts;
+  }
+
+  function renderActions(res) {
+    damageEl.hidden = false;
+    let left = null;
+
+    const c = res.cleaned;
+    if (c) {
+      left = c.remaining;
+      damageEl.appendChild(para(c.done.length
+        ? 'Removed ' + n(c.done.length) + ' duplicated definition' +
+          (c.done.length === 1 ? '' : 's') + ', ' + n(c.removed) + ' blocks.'
+        : 'No duplicated definition was removed.', c.done.length ? null : 'warn'));
+      if (c.done.length) damageEl.appendChild(bullets(c.done.map(function (d) {
+        return d.target + ' › ' + d.label + ' - ' + n(d.removed) + ' blocks';
+      })));
+      skips(c.skipped);
+    }
+
+    const d = res.deleted;
+    if (d) {
+      left = d.remaining;
+      damageEl.appendChild(para(d.done.length
+        ? 'Deleted ' + n(d.done.length) + ' block' + (d.done.length === 1 ? '' : 's') +
+          ' that did nothing, ' + n(d.removed) + ' blocks with their dropdowns.'
+        : 'Nothing was deleted.', d.done.length ? null : 'warn'));
+      if (d.done.length) damageEl.appendChild(bullets(d.done.map(function (x) {
+        return x.target + ' › "' + x.script + '" - ' + x.label +
+               ', which named ' + x.what + ' "' + x.value + '"';
+      })));
+      skips(d.skipped);
+    }
+
+    const f = res.fixed;
+    if (f) {
+      left = f.remaining;
+      damageEl.appendChild(para(f.done.length
+        ? 'Fixed ' + n(f.done.length) + ' covered reference' + (f.done.length === 1 ? '' : 's') + '.'
+        : 'Nothing needed fixing.', f.done.length ? null : 'warn'));
+      if (f.done.length) damageEl.appendChild(bullets(f.done.map(function (x) {
+        return x.target + ' › ' + x.label + ' - ' + x.what;
+      })));
+    }
+
+    const rest = left || [];
+    const high = pick(rest, 'high'), mid = pick(rest, 'mid'), low = pick(rest, 'low');
+    damageEl.className = worst(high, mid);
+    if (rest.length) {
+      damageEl.appendChild(para('Still in the file:', 'note'));
+      sections(high, mid, low);
+    } else {
+      damageEl.appendChild(para('Nothing else is wrong with the file.', 'note'));
+    }
+  }
+
+  function skips(list) {
+    if (!list || !list.length) return;
+    damageEl.appendChild(para('Left alone, a check did not pass:', 'warn'));
+    damageEl.appendChild(bullets(list.map(function (s) {
+      return s.target + ' › ' + s.label + ' - ' + s.why;
+    })));
   }
 
   function renderRaster(r) {
@@ -153,6 +351,9 @@
   soundEl.addEventListener('change', paintSoundUi);
   paintSoundUi();
 
+  // Read, look for damage, and stop there if there is anything to decide. The
+  // slow passes are not touched until apply() runs, so choosing costs nothing
+  // and no work is ever repeated.
   async function run(file) {
     if (busy) return;
     if (!window.CompressionStream || !window.DecompressionStream) {
@@ -167,59 +368,107 @@
 
     try {
       const buffer = await file.arrayBuffer();
-      const opts = {};
-      if (rasterEl.checked) {
-        opts.rasterize = RASTER.pass({
-          scale: Number($('rasterScale').value),
-          supersample: Number($('rasterSample').value),
-          antialias: $('rasterAA').checked
-        });
+      statusEl.textContent = 'Checking the project';
+      await tick();
+      const pre = await SB3.analyse(buffer);
+      pending = { file: file, buffer: buffer };
+
+      if (pre.cleanable || pre.deletable || pre.fixable) {
+        statusEl.hidden = true;
+        chrome(false);
+        resultEl.hidden = false;
+        renderReview(pre);
+        return;
       }
-      if (soundEl.checked) {
-        statusEl.textContent = 'Loading the mp3 encoder';
-        await tick();
-        await loadLame();
-        opts.sounds = SOUND.pass({ kbps: Number($('soundKbps').value) });
-      }
-
-      const res = await SB3.process(buffer, opts, async msg => {
-        statusEl.textContent = msg;
-        await tick();
-      });
-
-      statsEl.innerHTML = '';
-      const rows = Object.keys(res.stats).sort((a, b) => res.stats[b] - res.stats[a]);
-      for (const k of rows) {
-        const tr = statsEl.insertRow();
-        tr.insertCell().textContent = k;
-        tr.insertCell().textContent = n(res.stats[k]);
-      }
-
-      // Rasterizing writes a bitmapResolution back onto every costume it
-      // touches, so on that path the json can come out bigger than it went in.
-      const saved = res.before - res.after;
-      const pct = res.before ? (100 * Math.abs(saved) / res.before).toFixed(1) : '0.0';
-      const verdict = saved < 0
-        ? '<b class="bad">' + n(-saved) + ' added, ' + pct + '%</b>'
-        : '<b>' + n(saved) + ' saved, ' + pct + '%</b>';
-      summaryEl.innerHTML =
-        'Verified identical, ' + n(res.compared) + ' live blocks compared.<br>' +
-        'project.json ' + n(res.before) + ' to ' + n(res.after) + ' bytes (' + verdict + ').';
-
-      renderRaster(res.raster);
-      renderSounds(res.sounds);
-
-      url = URL.createObjectURL(res.blob);
-      downloadEl.href = url;
-      downloadEl.download = file.name.replace(/\.sb3$/i, '') + ' (shrunk).sb3';
-
-      statusEl.hidden = true;
-      resultEl.hidden = false;
+      await finish({});
     } catch (e) {
       fail(e.message || String(e), e.problems);
     } finally {
       busy = false;
     }
+  }
+
+  async function apply() {
+    if (busy || !pending) return;
+    busy = true;
+    statusEl.hidden = false;
+    statusEl.textContent = 'Starting';
+    await tick();
+    try {
+      await finish(chosenActions());
+    } catch (e) {
+      fail(e.message || String(e), e.problems);
+    } finally {
+      busy = false;
+    }
+  }
+
+  // stats, summary and the download link are meaningless during the review
+  function chrome(on) {
+    statsEl.hidden = !on;
+    summaryEl.hidden = !on;
+    downloadEl.hidden = !on;
+  }
+
+  async function finish(actions) {
+    const file = pending.file, buffer = pending.buffer;
+    const opts = Object.assign({}, actions);
+    if (rasterEl.checked) {
+      opts.rasterize = RASTER.pass({
+        scale: Number($('rasterScale').value),
+        supersample: Number($('rasterSample').value),
+        antialias: $('rasterAA').checked
+      });
+    }
+    if (soundEl.checked) {
+      statusEl.textContent = 'Loading the mp3 encoder';
+      await tick();
+      await loadLame();
+      opts.sounds = SOUND.pass({ kbps: Number($('soundKbps').value) });
+    }
+
+    const res = await SB3.process(buffer, opts, async msg => {
+      statusEl.textContent = msg;
+      await tick();
+    });
+
+    statsEl.innerHTML = '';
+    const rows = Object.keys(res.stats).sort((a, b) => res.stats[b] - res.stats[a]);
+    for (const k of rows) {
+      const tr = statsEl.insertRow();
+      tr.insertCell().textContent = k;
+      tr.insertCell().textContent = n(res.stats[k]);
+    }
+
+    // Rasterizing writes a bitmapResolution back onto every costume it
+    // touches, so on that path the json can come out bigger than it went in.
+    const saved = res.before - res.after;
+    const pct = res.before ? (100 * Math.abs(saved) / res.before).toFixed(1) : '0.0';
+    const verdict = saved < 0
+      ? '<b class="bad">' + n(-saved) + ' added, ' + pct + '%</b>'
+      : '<b>' + n(saved) + ' saved, ' + pct + '%</b>';
+    // With cleanup on, the output is deliberately not the project that came
+    // in, so say what it was checked against instead of implying otherwise.
+    const wiped = (res.cleaned && res.cleaned.removed) ||
+                  (res.deleted && res.deleted.removed) ||
+                  (res.fixed && res.fixed.fixed);
+    summaryEl.innerHTML =
+      (wiped ? 'Verified identical to the cleaned project, ' : 'Verified identical, ') +
+      n(res.compared) + ' live blocks compared.<br>' +
+      'project.json ' + n(res.before) + ' to ' + n(res.after) + ' bytes (' + verdict + ').';
+
+    renderDamage(res);
+    renderRaster(res.raster);
+    renderSounds(res.sounds);
+
+    url = URL.createObjectURL(res.blob);
+    downloadEl.href = url;
+    downloadEl.download = file.name.replace(/\.sb3$/i, '') +
+      (wiped ? ' (shrunk, cleaned).sb3' : ' (shrunk).sb3');
+
+    chrome(true);
+    statusEl.hidden = true;
+    resultEl.hidden = false;
   }
 
   fileInput.addEventListener('change', () => {
