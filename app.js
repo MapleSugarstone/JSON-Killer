@@ -465,10 +465,12 @@
     const wiped = (res.cleaned && res.cleaned.removed) ||
                   (res.deleted && res.deleted.removed) ||
                   (res.fixed && res.fixed.fixed);
-    // Nothing was compared when nothing was changed, and claiming a check that
-    // never ran would be the one lie this page cannot afford.
+    // Claiming a check that never ran would be the one lie this page cannot
+    // afford. "untouched" was also wrong: rasterizing and sound conversion
+    // rewrite the costume and sound entries, so the json does change on those
+    // paths. What is true is only that no shrinking pass ran.
     const checked = !killEl.checked
-      ? 'project.json untouched.'
+      ? 'No Killing done.'
       : (wiped ? 'Verified identical to the cleaned project, ' : 'Verified identical, ') +
         n(res.compared) + ' live blocks compared.';
     summaryEl.innerHTML = checked + '<br>' +
