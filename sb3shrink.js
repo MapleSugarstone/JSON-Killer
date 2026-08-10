@@ -289,7 +289,7 @@ const SB3 = (function () {
 
   function bump(stats, k, n) { stats[k] = (stats[k] || 0) + (n === undefined ? 1 : n); }
 
-  function pruneBlockKeys(target, stats, keepNext) {
+  function pruneBlockKeys(target, stats) {
     const blocks = target.blocks;
     for (const id of Object.keys(blocks)) {
       const b = blocks[id];
@@ -297,7 +297,7 @@ const SB3 = (function () {
       const out = {};
       for (const k of Object.keys(b)) {
         const v = b[k];
-        if (k === 'next' && v === null && !keepNext) { bump(stats, '"next":null dropped'); continue; }
+        if (k === 'next' && v === null) { bump(stats, '"next":null dropped'); continue; }
         if (k === 'inputs' && (!v || !Object.keys(v).length)) { bump(stats, '"inputs":{} dropped'); continue; }
         if (k === 'fields' && (!v || !Object.keys(v).length)) { bump(stats, '"fields":{} dropped'); continue; }
         if (k === 'shadow' && v === false) { bump(stats, '"shadow":false dropped'); continue; }
@@ -338,7 +338,7 @@ const SB3 = (function () {
     return Math.round(scaled) / 1000;
   }
 
-  function trimAssets(target, stats, dropSvgBitmapRes) {
+  function trimAssets(target, stats) {
     for (const c of target.costumes) {
       const fmt = c.dataFormat;
       // drop md5ext only when scratch-vm would rebuild the identical string
@@ -353,7 +353,11 @@ const SB3 = (function () {
           c[k] = r;
         }
       }
-      if (dropSvgBitmapRes && fmt === 'svg' && c.bitmapResolution === 1) {
+      // Only ever the svg default. scratch-vm's vector path never reads the
+      // field (load-costume.js loadVector_ takes the rotation centre straight
+      // from the json), and editing the costume runs updateSvg, which writes
+      // bitmapResolution = 1 back on. A costume that says 2 is left alone.
+      if (fmt === 'svg' && c.bitmapResolution === 1) {
         delete c.bitmapResolution;
         bump(stats, 'svg bitmapResolution dropped');
       }
@@ -364,13 +368,12 @@ const SB3 = (function () {
     }
   }
 
-  function shrink(project, opts) {
-    opts = opts || {};
+  function shrink(project) {
     const stats = {};
     for (const t of project.targets) {
       sweepOrphans(t, stats);
-      pruneBlockKeys(t, stats, !!opts.keepNext);
-      trimAssets(t, stats, !!opts.dropSvgBitmapRes);
+      pruneBlockKeys(t, stats);
+      trimAssets(t, stats);
     }
     return stats;
   }
@@ -456,7 +459,10 @@ const SB3 = (function () {
         const ca = ta.costumes[j], cb = tb.costumes[j];
         const nm = ca.name;
         for (const k of ['name', 'assetId', 'dataFormat', 'bitmapResolution']) {
-          if (k === 'bitmapResolution' && !('bitmapResolution' in cb)) continue;
+          // the only bitmapResolution that may go missing is the redundant 1 on
+          // an svg. Gone from anything else and the comparison below catches it.
+          if (k === 'bitmapResolution' && !('bitmapResolution' in cb) &&
+              ca.dataFormat === 'svg' && ca.bitmapResolution === 1) continue;
           chk(ca[k] === cb[k], n + '/' + nm + ': costume ' + k + ' changed');
         }
         const want = ca.md5ext || (ca.assetId + '.' + ca.dataFormat);
@@ -523,7 +529,7 @@ const SB3 = (function () {
     const working = JSON.parse(text);
 
     say('Shrinking');
-    const stats = shrink(working, opts);
+    const stats = shrink(working);
 
     say('Serializing');
     let out = new TextEncoder().encode(JSON.stringify(working));

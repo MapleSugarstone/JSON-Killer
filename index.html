@@ -50,8 +50,6 @@
     </label>
 
     <div id="opts">
-      <label><input type="checkbox" id="keepNext"> Keep <code>"next":null</code></label>
-      <label><input type="checkbox" id="svgRes"> Also drop <code>bitmapResolution</code> from svg costumes</label>
       <label><input type="checkbox" id="rasterize"> Rasterize svg costumes to png</label>
 
       <div id="rasterOpts" hidden>
@@ -119,6 +117,10 @@
     <li>Drops costume <code>md5ext</code> when it equals
       <code>assetId + "." + dataFormat</code>, which scratch-vm rebuilds. Sound
       <code>md5ext</code> stays since it has no fallback.</li>
+    <li>Drops <code>bitmapResolution</code> from svg costumes that carry the
+      default 1. Nothing on the vector path reads it: <code>loadVector_</code>
+      ignores it, and editing the costume has <code>updateSvg</code> write it
+      back as 1.</li>
     <li>Rounds rotation centre floats to 3dp, trimming noise like
       <code>299.50337500000004</code>.</li>
     <li>Deletes orphaned blocks, reachable from no top level script. Residue

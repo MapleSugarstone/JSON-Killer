@@ -167,7 +167,7 @@
 
     try {
       const buffer = await file.arrayBuffer();
-      const opts = { keepNext: $('keepNext').checked, dropSvgBitmapRes: $('svgRes').checked };
+      const opts = {};
       if (rasterEl.checked) {
         opts.rasterize = RASTER.pass({
           scale: Number($('rasterScale').value),

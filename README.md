@@ -18,6 +18,8 @@ Open the page, drop an `.sb3` in, download the result.
 - Drops the trailing null id from field arrays, read behind `if (fieldId)`.
 - Drops costume `md5ext` when it equals `assetId + "." + dataFormat`, which
   scratch-vm rebuilds. Sound `md5ext` stays, no fallback there.
+- Drops `bitmapResolution` from svg costumes that carry the default 1. The
+  vector load path never reads it, and `updateSvg` writes it back.
 - Rounds rotation centre floats to 3dp.
 - Deletes orphaned blocks, reachable from no top level script.
 - Keeps `"parent":null`, which `getTopLevelScript` requires.
