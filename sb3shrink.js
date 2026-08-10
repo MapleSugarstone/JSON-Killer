@@ -718,6 +718,11 @@ const SB3 = (function () {
     OPERAND2: 'its second slot'
   };
 
+  // A block name is several words and lands in the middle of a sentence, where
+  // "the start sound block names sound x" runs together into something you have
+  // to read twice. Quoting it marks where the name stops.
+  const quoted = s => "'" + s + "'";
+
   function blockLabel(id, blocks) {
     const b = blocks[id];
     if (!b) return 'a block that is not in the project';
@@ -741,15 +746,15 @@ const SB3 = (function () {
     }
     if (op === 'procedures_call') {
       const sig = prettyProccode(b.mutation);
-      return sig ? 'the ' + sig + ' block' : 'a custom block';
+      return sig ? 'the ' + quoted(sig) + ' block' : 'a custom block';
     }
+    const name = quoted(SHORT[op] || op.replace(/^[a-z]+_/, ''));
     for (const k of Object.keys(NAMED_FIELDS)) {
       if (fieldValues[k]) {
-        return 'the ' + (SHORT[op] || op.replace(/^[a-z]+_/, '')) + ' block on ' +
-               NAMED_FIELDS[k] + ' ' + fieldValues[k];
+        return 'the ' + name + ' block on ' + NAMED_FIELDS[k] + ' ' + fieldValues[k];
       }
     }
-    return 'the ' + (SHORT[op] || op.replace(/^[a-z]+_/, '')) + ' block';
+    return 'the ' + name + ' block';
   }
 
   // the top level block a block sits under, which is the script someone would
@@ -1377,25 +1382,30 @@ const SB3 = (function () {
     // has code the editor cannot show, which is what a sweep is most likely to
     // mistake for residue. Report it rather than carry it through in silence:
     // after the pass it is much harder to notice.
-    const damaged = describeDamage(parsed);
-    const cleanable = brokenDuplicates(parsed).length;
-    const deletable = deadBlocks(parsed).length;
-    const fixable = coveredFixes(parsed).length;
+    //
+    // All of it is skipped when the json is being left alone. Walking every
+    // block to describe damage nobody is going to act on costs seconds on a
+    // large project and answers a question that was not asked.
+    const shrinking = opts.shrink !== false;
+    const damaged = shrinking ? describeDamage(parsed) : [];
+    const cleanable = shrinking ? brokenDuplicates(parsed).length : 0;
+    const deletable = shrinking ? deadBlocks(parsed).length : 0;
+    const fixable = shrinking ? coveredFixes(parsed).length : 0;
 
     // Cleaning is deliberate destruction, so it happens here, before the pair
     // of copies the verifier compares. Everything downstream then has to come
     // out identical to the cleaned project, which keeps shrinking held to the
     // same standard it was always held to and keeps the two jobs separable.
     let cleaned = null, deleted = null, fixed = null;
-    if (opts.cleanDuplicates) {
+    if (opts.cleanDuplicates && shrinking) {
       say('Removing broken duplicate scripts');
       cleaned = cleanDuplicates(parsed);
     }
-    if (opts.deleteDead) {
+    if (opts.deleteDead && shrinking) {
       say('Deleting blocks that do nothing');
       deleted = deleteDeadBlocks(parsed);
     }
-    if (opts.fixCovered) {
+    if (opts.fixCovered && shrinking) {
       say('Repairing covered references');
       fixed = fixCoveredRefs(parsed);
     }
@@ -1409,21 +1419,33 @@ const SB3 = (function () {
     }
 
     const baseText = edited ? JSON.stringify(parsed) : text;
-    const original = JSON.parse(baseText);
     const working = JSON.parse(baseText);
 
-    say('Shrinking');
-    const stats = shrink(working);
+    // With shrinking off the json is carried through as the exact bytes it
+    // arrived as, not re-serialized. Writing it back out would quietly reformat
+    // a file the run was asked to leave alone, and a size change on a pass
+    // nobody asked for is indistinguishable from a bug.
+    let stats = {};
+    let compared = 0;
+    let out = edited ? new TextEncoder().encode(baseText) : raw;
 
-    say('Serializing');
-    let out = new TextEncoder().encode(JSON.stringify(working));
+    if (shrinking) {
+      const original = JSON.parse(baseText);
 
-    say('Verifying');
-    const { compared, problems } = verify(original, JSON.parse(new TextDecoder().decode(out)));
-    if (problems.length) {
-      const err = new Error('Verification failed, nothing was written.');
-      err.problems = problems;
-      throw err;
+      say('Shrinking');
+      stats = shrink(working);
+
+      say('Serializing');
+      out = new TextEncoder().encode(JSON.stringify(working));
+
+      say('Verifying');
+      const check = verify(original, JSON.parse(new TextDecoder().decode(out)));
+      compared = check.compared;
+      if (check.problems.length) {
+        const err = new Error('Verification failed, nothing was written.');
+        err.problems = check.problems;
+        throw err;
+      }
     }
 
     // Rasterizing and sound conversion rewrite assets on purpose, so they run

@@ -7,6 +7,7 @@
   const statusEl = $('status'), errorEl = $('error'), resultEl = $('result');
   const statsEl = $('stats'), summaryEl = $('summary'), downloadEl = $('download');
   const damageEl = $('damage');
+  const killEl = $('killjson');
   const rasterEl = $('rasterize'), rasterOptsEl = $('rasterOpts'), rasterReportEl = $('rasterReport');
   const rasterDocsEl = $('rasterDocs');
   const soundEl = $('sounds'), soundOptsEl = $('soundOpts'), soundReportEl = $('soundReport');
@@ -359,6 +360,11 @@
     if (!window.CompressionStream || !window.DecompressionStream) {
       return fail('This browser has no CompressionStream support. Use a current Chrome, Firefox or Safari.');
     }
+    if (!killEl.checked && !rasterEl.checked && !soundEl.checked) {
+      reset();
+      dropText.textContent = file.name;
+      return fail('No features enabled. Tick at least one of the boxes above.');
+    }
     busy = true;
     reset();
     dropText.textContent = file.name;
@@ -368,10 +374,16 @@
 
     try {
       const buffer = await file.arrayBuffer();
+      pending = { file: file, buffer: buffer };
+
+      // Looking for damage means walking every block in the project, which is
+      // only worth doing for someone who is going to act on it. With the json
+      // left alone there is nothing here to act on, so the walk is skipped.
+      if (!killEl.checked) return await finish({});
+
       statusEl.textContent = 'Checking the project';
       await tick();
       const pre = await SB3.analyse(buffer);
-      pending = { file: file, buffer: buffer };
 
       if (pre.cleanable || pre.deletable || pre.fixable) {
         statusEl.hidden = true;
@@ -413,6 +425,7 @@
   async function finish(actions) {
     const file = pending.file, buffer = pending.buffer;
     const opts = Object.assign({}, actions);
+    opts.shrink = killEl.checked;
     if (rasterEl.checked) {
       opts.rasterize = RASTER.pass({
         scale: Number($('rasterScale').value),
@@ -452,9 +465,13 @@
     const wiped = (res.cleaned && res.cleaned.removed) ||
                   (res.deleted && res.deleted.removed) ||
                   (res.fixed && res.fixed.fixed);
-    summaryEl.innerHTML =
-      (wiped ? 'Verified identical to the cleaned project, ' : 'Verified identical, ') +
-      n(res.compared) + ' live blocks compared.<br>' +
+    // Nothing was compared when nothing was changed, and claiming a check that
+    // never ran would be the one lie this page cannot afford.
+    const checked = !killEl.checked
+      ? 'project.json untouched.'
+      : (wiped ? 'Verified identical to the cleaned project, ' : 'Verified identical, ') +
+        n(res.compared) + ' live blocks compared.';
+    summaryEl.innerHTML = checked + '<br>' +
       'project.json ' + n(res.before) + ' to ' + n(res.after) + ' bytes (' + verdict + ').';
 
     renderDamage(res);
@@ -464,7 +481,8 @@
     url = URL.createObjectURL(res.blob);
     downloadEl.href = url;
     downloadEl.download = file.name.replace(/\.sb3$/i, '') +
-      (wiped ? ' (shrunk, cleaned).sb3' : ' (shrunk).sb3');
+      (!killEl.checked ? ' (converted).sb3'
+       : wiped ? ' (shrunk, cleaned).sb3' : ' (shrunk).sb3');
 
     chrome(true);
     statusEl.hidden = true;
