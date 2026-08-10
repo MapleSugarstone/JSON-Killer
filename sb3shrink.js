@@ -228,10 +228,14 @@ const SB3 = (function () {
     return out;
   }
 
+  // Only blocks that are actually in the map. An input was always checked, but
+  // next was not, so a stack whose next names a block the file does not contain
+  // handed callers an id they then looked up and got nothing for. Every walk
+  // here assumes what it is given is a block, so the check belongs in one place.
   function children(b, blocks) {
     if (Array.isArray(b)) return [];
     const out = [];
-    if (b.next) out.push(b.next);
+    if (b.next && (b.next in blocks)) out.push(b.next);
     const inputs = b.inputs || {};
     for (const k of Object.keys(inputs)) {
       const inp = inputs[k];
@@ -823,7 +827,12 @@ const SB3 = (function () {
           const field = (b.fields || {})[rule[0]];
           const value = Array.isArray(field) ? field[0] : null;
           const kind = rule[1];
-          if (typeof value === 'string' && value !== '' &&
+          // A menu nothing reaches is drawn nowhere and run by nothing, so it
+          // is not a dead reference, it is just sitting in the file. Saying it
+          // "runs and does nothing" would be false and would send someone
+          // hunting through a script for a block that is not in it.
+          if (live.has(id) &&
+              typeof value === 'string' && value !== '' &&
               MENU_SPECIALS[kind].indexOf(value) < 0 && !known[kind].has(value) &&
               !numericName(kind, value)) {
             const holder = (b.parent != null && (b.parent in blocks)) ? b.parent : id;
@@ -903,6 +912,12 @@ const SB3 = (function () {
         // how many pointers are being listed
         const plural = f.what.length > 1 || /blocks$/.test(f.what[0]);
         const lost = stranded.get(id) || 0;
+
+        // A block nothing draws, with nothing stranded under it, hides no code
+        // and offers nothing to do. The sweep keeps it because it names a live
+        // parent, and the stats say how many of those there are; a warning
+        // about one is a hunt for something that was never on the workspace.
+        if (!live.has(id) && !lost) continue;
 
         let msg = t.name + ' › "' + script + '" - ';
         if (id !== mine) msg += blockLabel(id, blocks) + ' inside it: ';
@@ -1123,10 +1138,13 @@ const SB3 = (function () {
       const at = referrers(blocks);
       const covered = obscuredShadows(blocks);
       const going = sweptOrphans(t).remove;
+      const live = reachable(blocks);
 
       for (const id of Object.keys(blocks)) {
         const b = blocks[id];
-        if (Array.isArray(b) || going.has(id)) continue;
+        // only what is actually on the workspace, so the count offered matches
+        // the findings shown rather than counting invisible bookkeeping too
+        if (Array.isArray(b) || going.has(id) || !live.has(id)) continue;
 
         const ref = at.get(id);
         if (b.shadow && ref && ref.n === 1 && b.parent !== ref.by) {
@@ -1218,9 +1236,11 @@ const SB3 = (function () {
         sprite: sprites
       };
 
+      const live = reachable(blocks);
       for (const id of Object.keys(blocks)) {
         const m = blocks[id];
         if (Array.isArray(m) || going.has(id) || covered.has(id)) continue;
+        if (!live.has(id)) continue;
         const rule = MENU_FIELDS[m.opcode];
         if (!rule) continue;
         const field = (m.fields || {})[rule[0]];
@@ -1230,9 +1250,20 @@ const SB3 = (function () {
         if (MENU_SPECIALS[kind].indexOf(value) >= 0 || known[kind].has(value)) continue;
         if (numericName(kind, value)) continue;
 
+        // A parent pointer is a claim, not proof. This project has menus naming
+        // a block that does not hold them at all, and taking that at face value
+        // would offer to delete an "if" for the sake of a costume menu that is
+        // nowhere near it. The holder has to actually have the menu in a slot.
         const bid = m.parent;
         const b = bid != null ? blocks[bid] : null;
         if (!b || Array.isArray(b) || b.shadow || b.topLevel || going.has(bid)) continue;
+        let holds = false;
+        for (const k of Object.keys(b.inputs || {})) {
+          const inp = b.inputs[k];
+          if (!Array.isArray(inp)) continue;
+          for (let i = 1; i < inp.length; i++) if (inp[i] === id) holds = true;
+        }
+        if (!holds) continue;
         const ref = at.get(bid);
         if (!ref || ref.n !== 1) continue;
         if (ref.slot !== 'next' && ref.slot.indexOf('SUBSTACK') !== 0) continue;
@@ -1429,7 +1460,7 @@ const SB3 = (function () {
 
   return {
     process, analyse, shrink, verify, readZip, writeZip, readEntry, storedEntry,
-    reachable, roots, canon, integrity, describeDamage,
+    reachable, roots, children, canon, integrity, describeDamage,
     brokenDuplicates, cleanDuplicates, sweptOrphans,
     deadBlocks, deleteDeadBlocks, coveredFixes, fixCoveredRefs, crc32
   };
