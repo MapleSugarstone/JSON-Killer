@@ -8,6 +8,8 @@
   const statsEl = $('stats'), summaryEl = $('summary'), downloadEl = $('download');
   const damageEl = $('damage');
   const killEl = $('killjson');
+  const svgEl = $('svgopt'), svgOptsEl = $('svgOpts'), svgReportEl = $('svgReport');
+  const svgDocsEl = $('svgDocs'), svgCullEl = $('svgCull');
   const rasterEl = $('rasterize'), rasterOptsEl = $('rasterOpts'), rasterReportEl = $('rasterReport');
   const rasterDocsEl = $('rasterDocs');
   const soundEl = $('sounds'), soundOptsEl = $('soundOpts'), soundReportEl = $('soundReport');
@@ -266,6 +268,46 @@
     })));
   }
 
+  function renderSvg(r) {
+    svgReportEl.hidden = true;
+    svgReportEl.textContent = '';
+    if (!r) return;
+    svgReportEl.hidden = false;
+
+    const head = document.createElement('p');
+    if (r.total === 0) {
+      head.textContent = 'No svg costumes to simplify.';
+    } else {
+      const verts = r.vertsBefore
+        ? ' ' + n(r.vertsBefore) + ' vertices to ' + n(r.vertsAfter) + '.'
+        : '';
+      head.textContent = 'Simplified ' + n(r.changed) + ' of ' + n(r.total) +
+        ' svg costumes.' + verts +
+        (r.cull ? ' ' + n(r.culled) + ' covered shape' + (r.culled === 1 ? '' : 's') + ' deleted.' : '') +
+        (r.eased ? ' ' + n(r.eased) + ' needed a gentler strength than you set.' : '') +
+        ' Assets ' + n(r.bytesBefore) + ' to ' + n(r.bytesAfter) + ' bytes.';
+    }
+    svgReportEl.appendChild(head);
+
+    // Not a footnote. Someone who ticked the box and got nothing needs to know
+    // it was the threshold and not a failure, and the threshold is the setting
+    // they turned on themselves.
+    if (r.light.length) {
+      svgReportEl.appendChild(nameList(r.light, r.cull
+        ? 'left alone, already as small as this can write them:'
+        : 'left alone, under the ' + n(r.minVerts) + ' vertex threshold:'));
+    }
+    if (r.noCull.length) {
+      svgReportEl.appendChild(nameList(r.noCull, 'simplified but not culled:'));
+    }
+    if (r.failed.length) {
+      svgReportEl.appendChild(nameList(r.failed, 'left alone, could not be simplified:'));
+    }
+    if (r.capped) {
+      svgReportEl.appendChild(para(n(r.capped) + ' shapes past the per costume limit were not checked.', 'note'));
+    }
+  }
+
   function renderRaster(r) {
     rasterReportEl.hidden = true;
     rasterReportEl.textContent = '';
@@ -319,6 +361,23 @@
   // the settings, not the write up under Method. The initial calls matter
   // because a browser restores a ticked box across a reload without firing
   // change.
+  function paintSvgUi() {
+    svgOptsEl.hidden = !svgEl.checked;
+    svgDocsEl.hidden = !svgEl.checked;
+  }
+  svgEl.addEventListener('change', paintSvgUi);
+  paintSvgUi();
+
+  // A number on its own means nothing next to a slider, and "0 px" is a
+  // strange way to say the vertices are staying put.
+  const svgTolEl = $('svgTolerance'), svgStrengthEl = $('svgStrength');
+  function paintStrength() {
+    const v = Number(svgTolEl.value);
+    svgStrengthEl.textContent = v === 0 ? 'lossless' : v + ' px';
+  }
+  svgTolEl.addEventListener('input', paintStrength);
+  paintStrength();
+
   function paintRasterUi() {
     rasterOptsEl.hidden = !rasterEl.checked;
     rasterDocsEl.hidden = !rasterEl.checked;
@@ -360,7 +419,7 @@
     if (!window.CompressionStream || !window.DecompressionStream) {
       return fail('This browser has no CompressionStream support. Use a current Chrome, Firefox or Safari.');
     }
-    if (!killEl.checked && !rasterEl.checked && !soundEl.checked) {
+    if (!killEl.checked && !svgEl.checked && !rasterEl.checked && !soundEl.checked) {
       reset();
       dropText.textContent = file.name;
       return fail('No features enabled. Tick at least one of the boxes above.');
@@ -426,6 +485,12 @@
     const file = pending.file, buffer = pending.buffer;
     const opts = Object.assign({}, actions);
     opts.shrink = killEl.checked;
+    if (svgEl.checked) {
+      opts.simplify = SVGOPT.pass({
+        tolerance: Number(svgTolEl.value),
+        cull: svgCullEl.checked
+      });
+    }
     if (rasterEl.checked) {
       opts.rasterize = RASTER.pass({
         scale: Number($('rasterScale').value),
@@ -477,6 +542,7 @@
       'project.json ' + n(res.before) + ' to ' + n(res.after) + ' bytes (' + verdict + ').';
 
     renderDamage(res);
+    renderSvg(res.simplified);
     renderRaster(res.raster);
     renderSounds(res.sounds);
 

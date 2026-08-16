@@ -142,6 +142,27 @@ const SB3 = (function () {
     };
   }
 
+  // Same, deflated. Png and mp3 are compressed already, but an svg is text and
+  // deflating one typically takes it to a third of its size, so a pass writing
+  // svg back out wants this rather than storedEntry. Falls back to storing on
+  // the rare file deflate makes bigger.
+  async function deflatedEntry(name, bytes, stamp) {
+    const data = await deflateRaw(bytes);
+    if (data.length >= bytes.length) return storedEntry(name, bytes, stamp);
+    return {
+      name: name,
+      flags: 0,
+      method: 8,
+      time: stamp ? stamp.time : 0,
+      date: stamp ? stamp.date : 0,
+      crc: crc32(bytes),
+      csize: data.length,
+      usize: bytes.length,
+      extAttr: 0,
+      data: data
+    };
+  }
+
   function writeZip(entries) {
     const enc = new TextEncoder();
     const parts = [];
@@ -1451,11 +1472,16 @@ const SB3 = (function () {
     // Rasterizing and sound conversion rewrite assets on purpose, so they run
     // after the json has been proved identical and never before it. The check
     // below is what covers whatever they did.
+    let simplified = null;
     let raster = null;
     let sounds = null;
+    // Simplifying runs before rasterizing, not after. Rasterizing throws the
+    // svg away, so the order only matters for the costumes it refuses, which
+    // stay svg and are exactly the big ones worth having simplified.
+    if (opts.simplify) simplified = await opts.simplify(entries, working, say);
     if (opts.rasterize) raster = await opts.rasterize(entries, working, say);
     if (opts.sounds) sounds = await opts.sounds(entries, working, say);
-    if (raster || sounds) out = new TextEncoder().encode(JSON.stringify(working));
+    if (simplified || raster || sounds) out = new TextEncoder().encode(JSON.stringify(working));
 
     // every asset the new json asks for must still be in the archive
     const names = new Set(entries.map(e => e.name));
@@ -1476,12 +1502,12 @@ const SB3 = (function () {
     pj.usize = out.length;
     const blob = writeZip(entries);
 
-    return { blob, stats, compared, before, after: out.length, json: out, raster, sounds,
+    return { blob, stats, compared, before, after: out.length, json: out, simplified, raster, sounds,
              damaged, cleanable, deletable, fixable, cleaned, deleted, fixed };
   }
 
   return {
-    process, analyse, shrink, verify, readZip, writeZip, readEntry, storedEntry,
+    process, analyse, shrink, verify, readZip, writeZip, readEntry, storedEntry, deflatedEntry,
     reachable, roots, children, canon, integrity, describeDamage,
     brokenDuplicates, cleanDuplicates, sweptOrphans,
     deadBlocks, deleteDeadBlocks, coveredFixes, fixCoveredRefs, crc32

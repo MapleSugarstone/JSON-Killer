@@ -52,6 +52,21 @@
     <div id="opts">
       <label><input type="checkbox" id="killjson" checked> Kill JSON</label>
 
+      <label><input type="checkbox" id="svgopt"> Simplify svg costumes</label>
+
+      <div id="svgOpts" hidden>
+        <p class="warn">This doesn't kill JSON.</p>
+        <p class="caution">WARNING: This can kinda break stuff.</p>
+        <label><input type="checkbox" id="svgCull" checked> Also delete parts of SVGs that aren't visible</label>
+        <p class="note">Deletes shapes hidden behind other shapes. A shape that
+          draws nothing (like an invisible hitbox) stays.</p>
+        <label for="svgTolerance">Strength: <output id="svgStrength">0.5 px</output></label>
+        <input type="range" id="svgTolerance" min="0" max="6" step="0.05" value="0.5">
+        <p class="note">How far a vertex may move. Higher
+          removes more. Every costume is redrawn and checked, and one that
+          doesn't survive will try again at a lower amount.</p>
+      </div>
+
       <label><input type="checkbox" id="rasterize"> Rasterize svg costumes to png</label>
 
       <div id="rasterOpts" hidden>
@@ -102,6 +117,7 @@
       <table id="stats"></table>
       <p id="summary"></p>
       <div id="damage" hidden></div>
+      <div id="svgReport" hidden></div>
       <div id="rasterReport" hidden></div>
       <div id="soundReport" hidden></div>
       <a id="download" class="button" download>Download shrunk sb3</a>
@@ -152,6 +168,23 @@
       <code>while (block.parent !== null)</code>.</li>
   </ul>
 
+  <section id="svgDocs" hidden>
+  <h2>Simplifying</h2>
+  <ul class="method">
+    <li>Doesn't decrease JSON. Fewer vertices per costume, which is what
+      scratch-render tessellates before it can draw. Curve runs are refitted,
+      flat curves become lines, straight runs are thinned, coordinates are
+      rounded to a fiftieth of a pixel, and path data is re-emitted in the
+      shorter of absolute and relative. Strength is how far a vertex may move,
+      in stage pixels.</li>
+    <li>Deleting invisible parts is decided by drawing. Each
+      shape is taken out, the costume is redrawn at 3&times; size, and it only
+      stays out if every pixel matched. Anything showing through a gradient
+      or a partly transparent fill is kept. Costumes with text, filters, masks
+      or blend modes are skipped.</li>
+  </ul>
+  </section>
+
   <section id="rasterDocs" hidden>
   <h2>Rasterizing</h2>
   <p>Doesn't decrease JSON. It redraws svg costumes
@@ -192,6 +225,8 @@
 <script src="life.js"></script>
 <script src="sb3shrink.js"></script>
 <script src="rasterize.js"></script>
+<!-- svgopt.js shares parseSvg and measure with rasterize.js, so it loads after -->
+<script src="svgopt.js"></script>
 <!-- lame.min.js is 156 kB and most visitors never convert a sound, so app.js
      fetches it the first time the box is ticked rather than on every load -->
 <script src="soundconv.js"></script>
