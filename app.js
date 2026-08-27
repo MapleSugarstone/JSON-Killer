@@ -7,7 +7,7 @@
   const statusEl = $('status'), errorEl = $('error'), resultEl = $('result');
   const statsEl = $('stats'), summaryEl = $('summary'), downloadEl = $('download');
   const damageEl = $('damage');
-  const killEl = $('killjson');
+  const killEl = $('killjson'), killOptsEl = $('killOpts'), hideListsEl = $('hideLists');
   const svgEl = $('svgopt'), svgOptsEl = $('svgOpts'), svgReportEl = $('svgReport');
   const svgDocsEl = $('svgDocs'), svgCullEl = $('svgCull');
   const rasterEl = $('rasterize'), rasterOptsEl = $('rasterOpts'), rasterReportEl = $('rasterReport');
@@ -378,6 +378,12 @@
   svgTolEl.addEventListener('input', paintStrength);
   paintStrength();
 
+  function paintKillUi() {
+    killOptsEl.hidden = !killEl.checked;
+  }
+  killEl.addEventListener('change', paintKillUi);
+  paintKillUi();
+
   function paintRasterUi() {
     rasterOptsEl.hidden = !rasterEl.checked;
     rasterDocsEl.hidden = !rasterEl.checked;
@@ -485,6 +491,7 @@
     const file = pending.file, buffer = pending.buffer;
     const opts = Object.assign({}, actions);
     opts.shrink = killEl.checked;
+    opts.hideLists = hideListsEl.checked;
     if (svgEl.checked) {
       opts.simplify = SVGOPT.pass({
         tolerance: Number(svgTolEl.value),

@@ -21,6 +21,12 @@ Open the page, drop an `.sb3` in, download the result.
 - Drops `bitmapResolution` from svg costumes that carry the default 1. The
   vector load path never reads it, and `updateSvg` writes it back.
 - Rounds rotation centre floats to 3dp.
+- Empties the copy of a list that a shown list monitor caches. The real data
+  stays in the list, and `_pushMonitors` refills the monitor every frame.
+- Removes list monitors that no script shows or hides, which is the state the
+  project was in before that list was ever ticked. A list a script does touch
+  keeps its entry, hidden and stripped of position, because deleting it would
+  make `show list` silently do nothing.
 - Deletes orphaned blocks, reachable from no top level script.
 - Keeps `"parent":null`, which `getTopLevelScript` requires.
 

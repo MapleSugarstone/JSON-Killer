@@ -441,8 +441,69 @@ const SB3 = (function () {
     }
   }
 
-  function shrink(project) {
+  /* -------------------------------------------------------------- monitors */
+
+  // Lists that a script shows or hides at runtime must keep their monitor
+  // entry. data_showlist routes through Blocks.changeBlock, which bails on an
+  // unknown id (blocks.js:661), and monitor BLOCKS exist only for monitors that
+  // were deserialized. Every other list monitor is editor-only display state.
+  function scriptedLists(project) {
+    const ids = new Set();
+    for (const t of project.targets) {
+      for (const id of Object.keys(t.blocks)) {
+        const b = t.blocks[id];
+        if (Array.isArray(b)) continue;
+        if (b.opcode === 'data_showlist' || b.opcode === 'data_hidelist') {
+          const f = (b.fields || {}).LIST;
+          if (f && f.length > 1) ids.add(f[1]);
+        }
+      }
+    }
+    return ids;
+  }
+
+  // A list monitor caches a copy of the list it displays. The real data lives
+  // in targets[].lists, and the runtime refills the monitor from it on every
+  // frame (Runtime._step -> _pushMonitors), so the cached copy is dead weight.
+  //
+  // With hideLists on, a list monitor no script touches is dropped outright,
+  // which is the state the project was in before that list was ever ticked in
+  // the editor. Scratch itself cannot undo that tick: unchecking a monitor
+  // calls requestHideMonitor, which only sets visible false. One a script does
+  // touch is kept but hidden and stripped of geometry. visible is set to false
+  // rather than dropped, because MonitorRecord defaults it to true, while
+  // x/y/width/height all default to 0.
+  function trimMonitors(project, stats, hideLists) {
+    const scripted = hideLists ? scriptedLists(project) : null;
+    const kept = [];
+    for (const m of (project.monitors || [])) {
+      if (m.opcode !== 'data_listcontents') { kept.push(m); continue; }
+      if (Array.isArray(m.value) && m.value.length) {
+        bump(stats, 'list monitor cache cleared');
+        m.value = [];
+      }
+      if (!hideLists) { kept.push(m); continue; }
+      if (!scripted.has(m.id)) {
+        bump(stats, 'display-only list monitors removed');
+        continue;
+      }
+      if (m.visible !== false) {
+        bump(stats, 'list monitors hidden');
+        m.visible = false;
+      }
+      let n = 0;
+      for (const k of ['x', 'y', 'width', 'height']) {
+        if (k in m) { delete m[k]; n++; }
+      }
+      if (n) bump(stats, 'monitor geometry dropped');
+      kept.push(m);
+    }
+    project.monitors = kept;
+  }
+
+  function shrink(project, opts) {
     const stats = {};
+    trimMonitors(project, stats, !opts || opts.hideLists !== false);
     for (const t of project.targets) {
       sweepOrphans(t, stats);
       pruneBlockKeys(t, stats);
@@ -522,15 +583,51 @@ const SB3 = (function () {
     return bad;
   }
 
-  function verify(oldP, newP) {
+  function verify(oldP, newP, opts) {
+    const hideLists = !opts || opts.hideLists !== false;
     const bad = [];
     const chk = (c, m) => { if (!c) bad.push(m); };
 
-    for (const k of ['extensions', 'meta', 'monitors', 'customFonts']) {
+    for (const k of ['extensions', 'meta', 'customFonts']) {
       chk(eq(oldP[k], newP[k]), 'top level ' + k + ' changed');
     }
     chk(oldP.targets.length === newP.targets.length, 'target count changed');
     if (bad.length) return { compared: 0, problems: bad };
+
+    // monitors: a list monitor may be emptied, hidden and stripped of geometry,
+    // or removed outright when no script shows or hides that list. Everything
+    // else about every monitor must survive untouched. Matched by id, not by
+    // position, because entries can legitimately disappear.
+    const oms = oldP.monitors || [], nms = newP.monitors || [];
+    const scripted = scriptedLists(newP);
+    const byId = new Map(nms.map(m => [m.id, m]));
+    chk(nms.length === new Set(nms.map(m => m.id)).size, 'output has duplicate monitor ids');
+    for (const a0 of oms) {
+      const b0 = byId.get(a0.id);
+      if (!b0) {
+        chk(hideLists && a0.opcode === 'data_listcontents' && !scripted.has(a0.id),
+            'monitor ' + a0.id + ' was removed; only display-only list monitors may be removed');
+        continue;
+      }
+      const a = Object.assign({}, a0), b = Object.assign({}, b0);
+      if (a.opcode === 'data_listcontents') {
+        chk(Array.isArray(b.value) && b.value.length === 0,
+            'monitor ' + a.id + ': list cache must be emptied, not altered');
+        a.value = []; b.value = [];
+        if (hideLists) {
+          chk(b.visible === false, 'monitor ' + a.id + ': must be hidden, not shown');
+          a.visible = false; b.visible = false;
+          for (const k of ['x', 'y', 'width', 'height']) {
+            chk(!(k in b), 'monitor ' + a.id + ': ' + k + ' must be dropped, not kept');
+            delete a[k]; delete b[k];
+          }
+        }
+      }
+      chk(eq(a, b), 'monitor ' + a.id + ' changed beyond its list cache');
+    }
+    for (const b0 of nms) {
+      chk(oms.some(a0 => a0.id === b0.id), 'output invented monitor ' + b0.id);
+    }
 
     let compared = 0;
     for (let i = 0; i < oldP.targets.length; i++) {
@@ -1454,13 +1551,13 @@ const SB3 = (function () {
       const original = JSON.parse(baseText);
 
       say('Shrinking');
-      stats = shrink(working);
+      stats = shrink(working, opts);
 
       say('Serializing');
       out = new TextEncoder().encode(JSON.stringify(working));
 
       say('Verifying');
-      const check = verify(original, JSON.parse(new TextDecoder().decode(out)));
+      const check = verify(original, JSON.parse(new TextDecoder().decode(out)), opts);
       compared = check.compared;
       if (check.problems.length) {
         const err = new Error('Verification failed, nothing was written.');

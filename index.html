@@ -52,6 +52,10 @@
     <div id="opts">
       <label><input type="checkbox" id="killjson" checked> Kill JSON</label>
 
+      <div id="killOpts">
+        <label><input type="checkbox" id="hideLists" checked> Hide shown lists and remove display-only list monitors</label>
+      </div>
+
       <label><input type="checkbox" id="svgopt"> Simplify svg costumes</label>
 
       <div id="svgOpts" hidden>
@@ -142,6 +146,16 @@
       back as 1.</li>
     <li>Rounds rotation centre floats to 3dp, trimming noise like
       <code>299.50337500000004</code>.</li>
+    <li>Empties the copy of a list that a shown list monitor caches. The real
+      data stays in the list, and <code>_pushMonitors</code> refills the monitor
+      from it every frame, green flag or not.</li>
+    <li>Removes list monitors that no script shows or hides, which is the state
+      the project was in before that list was ever ticked. Scratch cannot undo
+      that tick itself: unchecking a monitor calls
+      <code>requestHideMonitor</code>, which only sets <code>visible</code>
+      false. A list a script does touch keeps its entry, hidden and stripped of
+      position, because deleting it would make <code>show list</code> silently
+      do nothing.</li>
     <li>Deletes orphaned blocks: residue that no top level script reaches
       <em>and</em> that is attached to nothing which survives. A block still
       naming a live parent is a detached script rather than residue, so it is
