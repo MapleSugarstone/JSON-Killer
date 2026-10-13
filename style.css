@@ -104,9 +104,10 @@ a { color: var(--accent); }
 }
 
 #opts { margin-top: 0.9rem; display: flex; flex-direction: column; gap: 0.35rem; }
+#shrinkModes { display: flex; flex-direction: column; gap: 0.35rem; }
 #opts label { font-size: 0.9rem; color: var(--muted); cursor: pointer; }
 
-#svgOpts, #rasterOpts, #soundOpts {
+#svgOpts, #rasterOpts, #soundOpts, #exportOpts, #exportRasterOpts {
   display: flex;
   flex-direction: column;
   gap: 0.35rem;
@@ -116,7 +117,7 @@ a { color: var(--accent); }
 }
 #svgOpts .warn, #rasterOpts .warn, #soundOpts .warn { font-size: 0.82rem; color: var(--bad); margin: 0.15rem 0 0.35rem; }
 #svgOpts .caution { font-size: 0.82rem; color: var(--caution); margin: 0.15rem 0 0.35rem; }
-#svgOpts .note, #rasterOpts .note, #soundOpts .note { font-size: 0.78rem; color: var(--muted); margin: -0.1rem 0 0.3rem; }
+#svgOpts .note, #rasterOpts .note, #soundOpts .note, #exportOpts .note { font-size: 0.78rem; color: var(--muted); margin: -0.1rem 0 0.3rem; }
 /* the nested checkbox is a setting, not a heading for the notes under it */
 #svgOpts label { color: var(--fg); }
 #svgOpts output { color: var(--accent); font-variant-numeric: tabular-nums; }
@@ -126,7 +127,7 @@ a { color: var(--accent); }
   margin: 0.1rem 0 0.35rem;
   accent-color: var(--accent);
 }
-#svgOpts select, #rasterOpts select, #soundOpts select {
+#svgOpts select, #rasterOpts select, #soundOpts select, #exportOpts select {
   background: rgba(0, 0, 0, 0.3);
   color: var(--fg);
   border: 1px solid var(--line);

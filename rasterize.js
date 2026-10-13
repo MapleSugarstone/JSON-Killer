@@ -451,7 +451,8 @@ const RASTER = (function () {
   // svgopt.js on purpose. Simplifying a costume must not move the box this
   // file measures, and the only way to be sure of that is for both passes to
   // ask the same function.
-  return { pass, md5, parseSvg, measure, hostNode, largestStrokeWidth, STAGE_W, STAGE_H };
+  // toPng is shared with export.js, which draws costumes at any size.
+  return { pass, md5, parseSvg, measure, hostNode, largestStrokeWidth, toPng, STAGE_W, STAGE_H };
 })();
 
 if (typeof module !== 'undefined' && module.exports) module.exports = RASTER;

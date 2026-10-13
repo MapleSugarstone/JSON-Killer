@@ -45,11 +45,39 @@
 
   <section id="tool">
     <label id="drop" for="file" tabindex="0">
-      <input type="file" id="file" accept=".sb3" hidden>
-      <span id="droptext">Drop an .sb3 here, or click to choose one</span>
+      <input type="file" id="file" accept=".sb3,.sprite3" hidden>
+      <span id="droptext">Drop an .sb3 or .sprite3 here, or click to choose one</span>
     </label>
 
     <div id="opts">
+      <label><input type="checkbox" id="exportAssets"> Export assets instead</label>
+
+      <div id="exportOpts" hidden>
+        <p class="note">Downloads a zip of every costume and sound, one folder per
+          sprite, named as they are in the project.</p>
+        <label><input type="checkbox" id="exportPad" checked> Keep rotation centers</label>
+        <p class="note">Pads each costume so its rotation center is in the middle.
+          Keeps the asset relatively positioned to its 'center' in the Scratch costume editor</p>
+        <label><input type="checkbox" id="exportRaster"> Convert svg costumes to png</label>
+        <div id="exportRasterOpts" hidden>
+          <label for="exportScale">Resolution
+            <select id="exportScale">
+              <option value="1" selected>1&times; (native size)</option>
+              <option value="2">2&times;</option>
+              <option value="4">4&times;</option>
+            </select>
+          </label>
+          <label for="exportSample">Supersampling
+            <select id="exportSample">
+              <option value="1" selected>Off</option>
+              <option value="2">2&times;</option>
+              <option value="4">4&times;</option>
+            </select>
+          </label>
+          <label><input type="checkbox" id="exportAA" checked> Anti-alias. Causes smoothing</label>        </div>
+      </div>
+
+      <div id="shrinkModes">
       <label><input type="checkbox" id="killjson" checked> Kill JSON</label>
 
       <div id="killOpts">
@@ -112,6 +140,7 @@
         <p class="note">This only reduces if the file would be smaller afterwards.</p>
 
       </div>
+      </div>
     </div>
 
     <div id="status" hidden></div>
@@ -124,6 +153,7 @@
       <div id="svgReport" hidden></div>
       <div id="rasterReport" hidden></div>
       <div id="soundReport" hidden></div>
+      <div id="exportReport" hidden></div>
       <a id="download" class="button" download>Download shrunk sb3</a>
     </div>
   </section>
@@ -244,6 +274,7 @@
 <!-- lame.min.js is 156 kB and most visitors never convert a sound, so app.js
      fetches it the first time the box is ticked rather than on every load -->
 <script src="soundconv.js"></script>
+<script src="export.js"></script>
 <script src="app.js"></script>
 </body>
 </html>

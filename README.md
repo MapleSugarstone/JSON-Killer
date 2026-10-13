@@ -6,7 +6,10 @@ Scratch.mit.edu
 
 ## Use
 
-Open the page, drop an `.sb3` in, download the result.
+Open the page, drop an `.sb3` or a single `.sprite3` in, download the result.
+A sprite is shrunk the same way, but it is not checked for damage, because
+whether it names the stage or another sprite correctly cannot be told from the
+sprite alone.
 
 
 ## Method
@@ -64,6 +67,20 @@ moment it appears on screen: scratch-render tessellates every one of them first.
   Anything that does not come back is handed back untouched and listed.
 
 
+## Exporting assets
+
+"Export assets instead" downloads a zip of every costume and sound in place
+of a shrunk file. Each sprite gets a folder, and each file keeps its name from
+the project.
+
+- "Keep rotation centers" pads each costume so its rotation center is in the
+  middle. Scratch centers an uploaded costume on what is drawn, so the padded
+  costume lands where it was. An svg gets an invisible rectangle the size of
+  the padded box, because Scratch measures what is drawn and ignores the
+  viewBox. A padded jpg becomes a png so the padding can be transparent.
+- "Convert svg costumes to png" uses the rasterizer without the stage size
+  limit. 1x is the size the costume has on the stage.
+
 ## Files
 
 | File | Purpose |
@@ -72,6 +89,7 @@ moment it appears on screen: scratch-render tessellates every one of them first.
 | `sb3shrink.js` | Zip reader and writer, shrink, verify. No DOM |
 | `svgopt.js` | Optional svg simplify and cull pass. Needs the DOM |
 | `rasterize.js` | Optional svg to png pass, md5. Needs the DOM |
+| `export.js` | Optional asset export to a zip. Needs the DOM |
 | `soundconv.js` | Optional sound to mono mp3 pass. Needs the DOM |
 | `lame.min.js` | lamejs, vendored unmodified. Fetched only when sounds are converted |
 | `app.js` | UI and music |

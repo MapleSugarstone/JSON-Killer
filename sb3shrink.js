@@ -1464,11 +1464,27 @@ const SB3 = (function () {
   // Everything that can be known before anything expensive happens: what is
   // wrong and what could be done about it. Rasterizing and sound conversion are
   // the slow passes, so the decisions get made ahead of them and they run once.
+  // A sprite3 holds one target as sprite.json, where an sb3 holds project.json.
+  // The sprite is wrapped as a one target project so every pass can treat both
+  // alike, and unwrap() turns it back into what goes in the file.
+  function projectEntry(entries) {
+    const pj = entries.find(e => e.name === 'project.json');
+    if (pj) return { entry: pj, sprite: false };
+    const sj = entries.find(e => e.name === 'sprite.json');
+    if (sj) return { entry: sj, sprite: true };
+    throw new Error('No project.json or sprite.json inside.');
+  }
+
+  const wrap = (obj, sprite) => sprite ? { targets: [obj], monitors: [] } : obj;
+  const unwrap = (project, sprite) => sprite ? project.targets[0] : project;
+
+  // Whether a file names the stage or another sprite correctly cannot be told
+  // from one sprite alone, so a sprite3 is never checked for damage.
   async function analyse(buffer) {
     const entries = readZip(buffer);
-    const pj = entries.find(e => e.name === 'project.json');
-    if (!pj) throw new Error('No project.json inside.');
-    const project = JSON.parse(new TextDecoder().decode(await readEntry(pj)));
+    const pe = projectEntry(entries);
+    if (pe.sprite) return { damaged: [], cleanable: 0, deletable: 0, fixable: 0, sprite: true };
+    const project = JSON.parse(new TextDecoder().decode(await readEntry(pe.entry)));
     return {
       damaged: describeDamage(project),
       cleanable: brokenDuplicates(project).length,
@@ -1483,17 +1499,18 @@ const SB3 = (function () {
 
     say('Reading archive');
     const entries = readZip(buffer);
-    const pj = entries.find(e => e.name === 'project.json');
-    if (!pj) throw new Error('No project.json inside.');
+    const pe = projectEntry(entries);
+    const pj = pe.entry, sprite = pe.sprite;
+    const encode = p => new TextEncoder().encode(JSON.stringify(unwrap(p, sprite)));
 
-    say('Decompressing project.json');
+    say('Decompressing ' + pj.name);
     const raw = await readEntry(pj);
 
-    const text = new TextDecoder().decode(raw);
     const before = raw.length;
 
     say('Parsing');
-    const parsed = JSON.parse(text);
+    const parsed = wrap(JSON.parse(new TextDecoder().decode(raw)), sprite);
+    const text = JSON.stringify(parsed);
 
     // Damage the file arrived with, described before anything touches it. None
     // of it is caused by shrinking, and a project holding links that disagree
@@ -1505,25 +1522,26 @@ const SB3 = (function () {
     // block to describe damage nobody is going to act on costs seconds on a
     // large project and answers a question that was not asked.
     const shrinking = opts.shrink !== false;
-    const damaged = shrinking ? describeDamage(parsed) : [];
-    const cleanable = shrinking ? brokenDuplicates(parsed).length : 0;
-    const deletable = shrinking ? deadBlocks(parsed).length : 0;
-    const fixable = shrinking ? coveredFixes(parsed).length : 0;
+    const checking = shrinking && !sprite;
+    const damaged = checking ? describeDamage(parsed) : [];
+    const cleanable = checking ? brokenDuplicates(parsed).length : 0;
+    const deletable = checking ? deadBlocks(parsed).length : 0;
+    const fixable = checking ? coveredFixes(parsed).length : 0;
 
     // Cleaning is deliberate destruction, so it happens here, before the pair
     // of copies the verifier compares. Everything downstream then has to come
     // out identical to the cleaned project, which keeps shrinking held to the
     // same standard it was always held to and keeps the two jobs separable.
     let cleaned = null, deleted = null, fixed = null;
-    if (opts.cleanDuplicates && shrinking) {
+    if (opts.cleanDuplicates && checking) {
       say('Removing broken duplicate scripts');
       cleaned = cleanDuplicates(parsed);
     }
-    if (opts.deleteDead && shrinking) {
+    if (opts.deleteDead && checking) {
       say('Deleting blocks that do nothing');
       deleted = deleteDeadBlocks(parsed);
     }
-    if (opts.fixCovered && shrinking) {
+    if (opts.fixCovered && checking) {
       say('Repairing covered references');
       fixed = fixCoveredRefs(parsed);
     }
@@ -1545,7 +1563,7 @@ const SB3 = (function () {
     // nobody asked for is indistinguishable from a bug.
     let stats = {};
     let compared = 0;
-    let out = edited ? new TextEncoder().encode(baseText) : raw;
+    let out = edited ? encode(parsed) : raw;
 
     if (shrinking) {
       const original = JSON.parse(baseText);
@@ -1554,10 +1572,10 @@ const SB3 = (function () {
       stats = shrink(working, opts);
 
       say('Serializing');
-      out = new TextEncoder().encode(JSON.stringify(working));
+      out = encode(working);
 
       say('Verifying');
-      const check = verify(original, JSON.parse(new TextDecoder().decode(out)), opts);
+      const check = verify(original, wrap(JSON.parse(new TextDecoder().decode(out)), sprite), opts);
       compared = check.compared;
       if (check.problems.length) {
         const err = new Error('Verification failed, nothing was written.');
@@ -1578,7 +1596,7 @@ const SB3 = (function () {
     if (opts.simplify) simplified = await opts.simplify(entries, working, say);
     if (opts.rasterize) raster = await opts.rasterize(entries, working, say);
     if (opts.sounds) sounds = await opts.sounds(entries, working, say);
-    if (simplified || raster || sounds) out = new TextEncoder().encode(JSON.stringify(working));
+    if (simplified || raster || sounds) out = encode(working);
 
     // every asset the new json asks for must still be in the archive
     const names = new Set(entries.map(e => e.name));
@@ -1600,11 +1618,19 @@ const SB3 = (function () {
     const blob = writeZip(entries);
 
     return { blob, stats, compared, before, after: out.length, json: out, simplified, raster, sounds,
-             damaged, cleanable, deletable, fixable, cleaned, deleted, fixed };
+             damaged, cleanable, deletable, fixable, cleaned, deleted, fixed, sprite };
+  }
+
+  // The project as a list of targets, for passes that only read assets.
+  async function openProject(buffer) {
+    const entries = readZip(buffer);
+    const pe = projectEntry(entries);
+    const obj = JSON.parse(new TextDecoder().decode(await readEntry(pe.entry)));
+    return { entries: entries, entry: pe.entry, project: wrap(obj, pe.sprite), sprite: pe.sprite };
   }
 
   return {
-    process, analyse, shrink, verify, readZip, writeZip, readEntry, storedEntry, deflatedEntry,
+    process, analyse, openProject, shrink, verify, readZip, writeZip, readEntry, storedEntry, deflatedEntry,
     reachable, roots, children, canon, integrity, describeDamage,
     brokenDuplicates, cleanDuplicates, sweptOrphans,
     deadBlocks, deleteDeadBlocks, coveredFixes, fixCoveredRefs, crc32

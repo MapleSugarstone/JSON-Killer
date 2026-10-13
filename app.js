@@ -14,6 +14,9 @@
   const rasterDocsEl = $('rasterDocs');
   const soundEl = $('sounds'), soundOptsEl = $('soundOpts'), soundReportEl = $('soundReport');
   const soundDocsEl = $('soundDocs');
+  const exportEl = $('exportAssets'), exportOptsEl = $('exportOpts'), shrinkModesEl = $('shrinkModes');
+  const exportRasterEl = $('exportRaster'), exportRasterOptsEl = $('exportRasterOpts');
+  const exportReportEl = $('exportReport');
 
   let url = null;
   let busy = false;
@@ -417,6 +420,67 @@
   soundEl.addEventListener('change', paintSoundUi);
   paintSoundUi();
 
+  // Exporting replaces the whole shrink pipeline, so its options hide the rest.
+  function paintExportUi() {
+    exportOptsEl.hidden = !exportEl.checked;
+    shrinkModesEl.hidden = exportEl.checked;
+    exportRasterOptsEl.hidden = !exportRasterEl.checked;
+  }
+  exportEl.addEventListener('change', paintExportUi);
+  exportRasterEl.addEventListener('change', paintExportUi);
+  paintExportUi();
+
+  function renderExport(r) {
+    exportReportEl.hidden = true;
+    exportReportEl.textContent = '';
+    if (!r) return;
+    exportReportEl.hidden = false;
+
+    const parts = [];
+    if (r.rasterized) parts.push(n(r.rasterized) + ' svg converted to png');
+    if (r.padded) parts.push(n(r.padded) + ' padded to keep their rotation center');
+    if (parts.length) exportReportEl.appendChild(para(parts.join(', ') + '.'));
+    if (r.notes.length) exportReportEl.appendChild(nameList(r.notes, 'exported with a problem:'));
+    if (r.failed.length) exportReportEl.appendChild(nameList(r.failed, 'not exported:'));
+    if (r.text.length) {
+      exportReportEl.appendChild(nameList(r.text, 'contain text, redrawn in this browser’s fonts. Check them:'));
+    }
+  }
+
+  async function exportAssets(file, buffer) {
+    const res = await EXPORT.run(buffer, {
+      pad: $('exportPad').checked,
+      raster: exportRasterEl.checked,
+      scale: Number($('exportScale').value),
+      supersample: Number($('exportSample').value),
+      antialias: $('exportAA').checked
+    }, async msg => {
+      statusEl.textContent = msg;
+      await tick();
+    });
+    const r = res.report;
+
+    statsEl.innerHTML = '';
+    summaryEl.textContent = 'Exported ' + n(r.costumes) + ' costume' + (r.costumes === 1 ? '' : 's') +
+      ' and ' + n(r.sounds) + ' sound' + (r.sounds === 1 ? '' : 's') + ' from ' +
+      n(r.targets) + (r.sprite ? ' sprite.' : ' sprites and the stage.');
+    renderDamage({});
+    renderSvg(null);
+    renderRaster(null);
+    renderSounds(null);
+    renderExport(r);
+
+    url = URL.createObjectURL(res.blob);
+    downloadEl.href = url;
+    downloadEl.download = file.name.replace(/\.(sb3|sprite3)$/i, '') + ' (assets).zip';
+    downloadEl.textContent = 'Download zip';
+
+    chrome(true);
+    statsEl.hidden = true;
+    statusEl.hidden = true;
+    resultEl.hidden = false;
+  }
+
   // Read, look for damage, and stop there if there is anything to decide. The
   // slow passes are not touched until apply() runs, so choosing costs nothing
   // and no work is ever repeated.
@@ -425,7 +489,7 @@
     if (!window.CompressionStream || !window.DecompressionStream) {
       return fail('This browser has no CompressionStream support. Use a current Chrome, Firefox or Safari.');
     }
-    if (!killEl.checked && !svgEl.checked && !rasterEl.checked && !soundEl.checked) {
+    if (!exportEl.checked && !killEl.checked && !svgEl.checked && !rasterEl.checked && !soundEl.checked) {
       reset();
       dropText.textContent = file.name;
       return fail('No features enabled. Tick at least one of the boxes above.');
@@ -440,6 +504,8 @@
     try {
       const buffer = await file.arrayBuffer();
       pending = { file: file, buffer: buffer };
+
+      if (exportEl.checked) return await exportAssets(file, buffer);
 
       // Looking for damage means walking every block in the project, which is
       // only worth doing for someone who is going to act on it. With the json
@@ -546,18 +612,20 @@
       : (wiped ? 'Verified identical to the cleaned project, ' : 'Verified identical, ') +
         n(res.compared) + ' live blocks compared.';
     summaryEl.innerHTML = checked + '<br>' +
-      'project.json ' + n(res.before) + ' to ' + n(res.after) + ' bytes (' + verdict + ').';
+      (res.sprite ? 'sprite.json ' : 'project.json ') + n(res.before) + ' to ' + n(res.after) + ' bytes (' + verdict + ').';
 
     renderDamage(res);
     renderSvg(res.simplified);
     renderRaster(res.raster);
     renderSounds(res.sounds);
+    renderExport(null);
 
+    const ext = res.sprite ? '.sprite3' : '.sb3';
     url = URL.createObjectURL(res.blob);
     downloadEl.href = url;
-    downloadEl.download = file.name.replace(/\.sb3$/i, '') +
-      (!killEl.checked ? ' (converted).sb3'
-       : wiped ? ' (shrunk, cleaned).sb3' : ' (shrunk).sb3');
+    downloadEl.download = file.name.replace(/\.(sb3|sprite3)$/i, '') +
+      (!killEl.checked ? ' (converted)' : wiped ? ' (shrunk, cleaned)' : ' (shrunk)') + ext;
+    downloadEl.textContent = 'Download ' + (killEl.checked ? 'shrunk' : 'converted') + ext.replace('.', ' ');
 
     chrome(true);
     statusEl.hidden = true;
